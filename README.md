@@ -6,72 +6,72 @@
 
 </div>
 
-Una aplicación nativa de Windows residente, asíncrona y modular diseñada para **monitorizar la batería de un portátil**, y encender/apagar de forma automatizada un enchufe inteligente de la marca **Meross** basado en umbrales de energía configurables. Creada desde cero priorizando la estabilidad, la conexión local persistente y el bajo consumo de recursos (Daemon).
+A native resident, asynchronous, and modular Windows application designed to **monitor laptop battery**, and automatically turn on/off a **Meross** smart plug based on configurable energy thresholds. Built from scratch prioritizing stability, persistent local connection, and low resource consumption (Daemon).
 
-## 🚀 Características Principales
+## 🚀 Key Features
 
-*   **Arquitectura MVC y Asincronía:** El núcleo (Backend) gestiona peticiones asíncronas de lectura (`meross-iot` y `psutil`) totalmente desacopladas de la interfaz visual (`customtkinter`).
-*   **Modo Residente (System Tray):** La aplicación está pensada para ejecutarse en segundo plano (Daemon). Al presionar el botón de cierre, se oculta silenciosamente junto al reloj de Windows (`pystray`) y continúa operando de forma desatendida.
-*   **Bóveda Criptográfica:** Uso del administrador de credenciales nativo de Windows (Módulo `keyring`). La contraseña real de tu cuenta Meross ¡no se guarda jamás en los ficheros locales!, protegiendo y aislando tus credenciales de los ataques en fichero plano.
-*   **Resiliencia Extrema y Antispam:** Si hay un corte Wifi, la app suspende ejecución suavemente y cuenta con una función rotativa matemática para evitar saturar el disco duro en picos falsos.
-*   **Agnóstica por Ficheros Absolutos:** Conserva su propio contexto fijo de guardado en la carpeta reservada del sistema para evitar que choquen los ejecutables encapsulados. Todo vive tranquilamente en tu sistema local bajo una estructura unificada y protegida nativamente por Windows.
+*   **MVC Architecture & Asynchrony:** The core (Backend) handles asynchronous read requests (`meross-iot` and `psutil`) completely decoupled from the visual interface (`customtkinter`).
+*   **Resident Mode (System Tray):** The application is designed to run in the background (Daemon). When pressing the close button, it silently hides next to the Windows clock (`pystray`) and continues operating unattended.
+*   **Cryptographic Vault:** Uses the native Windows credential manager (`keyring` Module). Your actual Meross account password is never saved in local files, protecting and isolating your credentials from plaintext attacks.
+*   **Extreme Resilience & Anti-spam:** If there's a Wi-Fi outage, the app gracefully suspends execution and uses a mathematical rotation function to avoid spamming the hard drive during false network spikes.
+*   **Absolute File Agnostic:** Preserves its own fixed save context in the reserved system folder to avoid collisions between packaged executables. Everything lives peacefully on your local system under a unified structure natively protected by Windows.
 
 ---
 
-## 💻 Requisitos 
+## 💻 Requirements
 
-Para poner a funcionar esto sin ejecutar un `.exe` precompilado asegúrate de tener las librerías activas en el entorno (Si usas un requirements.txt virtualizado):
+To run this without executing a precompiled `.exe`, make sure you have the active libraries in your environment:
 
 ```bash
 pip install meross-iot psutil customtkinter pystray keyring pillow python-dotenv
 ```
 
-> **Aviso de SO:** La lógica de telemetría de energía está compilada en exclusiva tirando del motor `psutil.sensors_battery()`. 
+> **OS Warning:** The telemetry logic is exclusively compiled drawing from the `psutil.sensors_battery()` engine.
 
 ---
 
-## 📂 Arquitectura de Ficheros 
+## 📂 File Architecture
 
-Este proyecto aplica separación de responsabilidades para favorecer mantenimiento:
+This project applies separation of concerns for easier maintenance:
 
 ```text
-📁 Proyecto Origen
-├── 📄 main.py (Punto de anclaje inicial de la aplicación)
+📁 Project Root
+├── 📄 main.py (Main entry point of the application)
 │
 └── 📁 src\
     ├── 📄 __init__.py 
-    ├── 📄 logger_config.py (Sistema de volcado atómico a Disco utf-8)
-    ├── 📄 config_manager.py (Gestor de Modelo y validación del Vault Keyring)
-    ├── 📄 battery_backend.py (Back-end en thread y lógica de Meross)
-    └── 📄 ui_app.py (Frontend en bloque CustomTkinter y callbacks asíncronos)
+    ├── 📄 logger_config.py (Atomic UTF-8 disk logging system)
+    ├── 📄 config_manager.py (Model manager and Keyring Vault validation)
+    ├── 📄 battery_backend.py (Background thread backend and Meross logic)
+    └── 📄 ui_app.py (CustomTkinter block frontend and async callbacks)
 ```
 
-### Rutas Persistentes
-Salvo modificación, el núcleo estático del programa siempre descansará en:
-> `C:\Users\TU_USUARIO\AppData\Roaming\VoltGuard`
+### Persistent Paths
+Unless modified, the static core of the program will always reside in:
+> `C:\Users\YOUR_USER\AppData\Roaming\VoltGuard`
 
-- `config.json`: Almacena exclusivamente el Email, el UUID del enchufe y los umbrales estadísticos de checkeo asintótico en tiempo plano.
-- `voltguard.log`: Registro acotado con auto-borrado (Rotación de fichero a ~1MB de peso máximo con 3 slots temporales en disco) para debug a fondo si falla la UI visual normal del Front.
+- `config.json`: Stores exclusively the Email, the Plug's UUID, and the statistical flat-time checking thresholds.
+- `voltguard.log`: Limited log with auto-deletion (Log rotation at ~1MB max size with 3 time slots on disk) for deep debugging if the visual UI fails.
 
 ---
 
-## 🛠 Instalación y Uso 
+## 🛠 Installation and Usage
 
-1. Sitúate en la raíz del proyecto.
-2. Abre una terminal.
-3. Arráncalo:
+1. Go to the project root.
+2. Open a terminal.
+3. Start it:
 
 ```bash
 python main.py
 ```
 
-4. La interfaz visual te pedirá de primera entrada: **Tu correo, Contraseña y el famoso UUID del Enchufe**. Relleno eso, configura los campos de rango `% de Min Batería`, `% Max Batería`, los `Segundos` que el motor espera antes de testear la variable de nuevo. 
+4. The visual interface will ask on the first login for: **Your email, Password, and the famous Plug UUID**. Once filled in, configure the range fields: `% Min Battery`, `% Max Battery`, and the `Seconds` the engine waits before querying the variable again.
 
-### ¿Dónde averiguo mi UUID de Meross?
-Toda central Meross en IoT asocia este identificante de forma unívoca de Hardware y Nube. La manera rústica de encontrarlo es usando uno de los test puros asíncronos en forma de script, pero te bastará arrancar la aplicación y ver el log ciego superior.
-*El propio log registrará al vuelo y destripará por nosotros cada ID única por cada enchufe de internet a casa si en la consola falla.*
+### Where do I find my Meross UUID?
+Every Meross IoT hub uniquely associates this Hardware and Cloud identifier. The rustic way to find it is using an async test script, but just starting the app and looking at the top blind log sequence will be enough.
+*The log itself will record on the fly and extract for us each unique ID for every internet plug at home if the console fails.*
 
-### Botones Activos Especiales:
+### Special Active Buttons:
 
-- **🔌 Test Enchufe**: Herramienta de oro puro. Pulsa esto y tu Frontend pondrá a prueba la asincronía directa con el Backend: tu enchufe intentará encenderse durante _2 segundos enteros_, y se apagará como un chasquido. De esto sacarás dos lecturas: la respuesta de latencia de red, y saber si has acertado escribiendo el UUID.
-- **Opción de Iniciar Minimizada**: Perfecto para meter esta aplicación dentro de las opciones de "*Ejecutar al encender el sistema Windows*" de tu propia bandeja de rutinas. Se lanza cargando el backend detrás, te ahorras el destello gráfico.
+- **🔌 Test Plug**: Pure gold tool. Press this and your Frontend will test the direct asynchrony with the Backend: your plug will attempt to turn on for _2 whole seconds_, and then turn off with a snap. From this, you will get two readings: network latency response, and know if you wrote the UUID correctly.
+- **Start Minimized Option**: Perfect for putting this application into the "*Run at Windows startup*" list of your daily routines. It launches loading the backend straight away, skipping the GUI flash.

@@ -95,8 +95,8 @@ class VoltGuardApp:
     def _run_tray(self):
         try:
             menu = (
-                pystray.MenuItem('Abrir', self.show_window, default=True),
-                pystray.MenuItem('Salir', self.quit_window)
+                pystray.MenuItem('Open', self.show_window, default=True),
+                pystray.MenuItem('Exit', self.quit_window)
             )
             self.tray_icon = pystray.Icon("VoltGuard", self._crear_icono_tray(), "VoltGuard", menu)
             self.tray_icon.run()
@@ -131,16 +131,16 @@ class VoltGuardApp:
             pwd = self.entry_password.get()
 
             if not new_email:
-                raise ValueError("Email obligatorio.")
+                raise ValueError("Email required.")
 
             if new_email != current_saved_email and pwd == "********":
-                raise ValueError("Si cambias el email, debes volver a escribir la contraseña.")
+                raise ValueError("If you change the email, you must re-enter the password.")
 
             if new_email != current_saved_email:
                 self.cfg_manager.password = ""
 
             if not pwd and not self.cfg_manager.password:
-                raise ValueError("Contraseña requerida.")
+                raise ValueError("Password required.")
 
             if pwd and pwd != "********":
                 self.cfg_manager.password = pwd
@@ -150,11 +150,11 @@ class VoltGuardApp:
             check_time = int(self.entry_time.get())
             uuid = self.entry_uuid.get().strip()
 
-            if not (1 <= min_bat <= 99): raise ValueError("Batería mínima entre 1 y 99.")
-            if not (1 <= max_bat <= 100): raise ValueError("Batería máxima entre 1 y 100.")
-            if min_bat >= max_bat: raise ValueError("Mínima debe ser menor que máxima.")
-            if check_time < 5: raise ValueError("Chequeo >= 5 segundos.")
-            if not uuid: raise ValueError("UUID obligatorio.")
+            if not (1 <= min_bat <= 99): raise ValueError("Minimum battery between 1 and 99.")
+            if not (1 <= max_bat <= 100): raise ValueError("Maximum battery between 1 and 100.")
+            if min_bat >= max_bat: raise ValueError("Minimum must be less than maximum.")
+            if check_time < 5: raise ValueError("Check interval >= 5 seconds.")
+            if not uuid: raise ValueError("UUID required.")
             
             self.cfg_manager.config["email"] = new_email
             self.cfg_manager.config["min_bat"] = min_bat
@@ -188,9 +188,9 @@ class VoltGuardApp:
         title_block.pack(side=ctk.LEFT, pady=12)
         ctk.CTkLabel(title_block, text="VoltGuard",
                      font=("Roboto", 18, "bold"), text_color="white").pack(anchor="w")
-        ctk.CTkLabel(title_block, text="Control automático de carga",
+        ctk.CTkLabel(title_block, text="Automatic charge control",
                      font=("Roboto", 11), text_color="#8888AA").pack(anchor="w")
-        self.status_label = ctk.CTkLabel(title_block, text="Detenido",
+        self.status_label = ctk.CTkLabel(title_block, text="Stopped",
                                          font=("Roboto", 11, "bold"), text_color="#888899")
         self.status_label.pack(anchor="w")
 
@@ -198,7 +198,7 @@ class VoltGuardApp:
         frame_cred = ctk.CTkFrame(main_frame, fg_color=BG_CARD, corner_radius=12)
         frame_cred.pack(fill=ctk.X, pady=4)
 
-        self._section_label(frame_cred, "CREDENCIALES MEROSS")
+        self._section_label(frame_cred, "MEROSS CREDENTIALS")
 
         entry_cfg = {"fg_color": INPUT_BG, "border_color": INPUT_BORDER, "border_width": 1}
 
@@ -208,14 +208,14 @@ class VoltGuardApp:
         self.entry_email.pack(fill=ctk.X, padx=12, pady=(2, 6))
         self.entry_email.insert(0, self.cfg_manager.config.get("email", ""))
 
-        ctk.CTkLabel(frame_cred, text="Contraseña:", font=("Roboto", 12),
+        ctk.CTkLabel(frame_cred, text="Password:", font=("Roboto", 12),
                      text_color="#CCCCDD").pack(anchor="w", padx=12)
         self.entry_password = ctk.CTkEntry(frame_cred, placeholder_text="••••••••", show="*", **entry_cfg)
         self.entry_password.pack(fill=ctk.X, padx=12, pady=(2, 6))
         if self.cfg_manager.password:
             self.entry_password.insert(0, "********")
 
-        ctk.CTkLabel(frame_cred, text="UUID del Enchufe:", font=("Roboto", 12),
+        ctk.CTkLabel(frame_cred, text="Plug UUID:", font=("Roboto", 12),
                      text_color="#CCCCDD").pack(anchor="w", padx=12)
         self.entry_uuid = ctk.CTkEntry(frame_cred, placeholder_text="2404083...", **entry_cfg)
         self.entry_uuid.pack(fill=ctk.X, padx=12, pady=(2, 12))
@@ -225,7 +225,7 @@ class VoltGuardApp:
         frame_param = ctk.CTkFrame(main_frame, fg_color=BG_CARD, corner_radius=12)
         frame_param.pack(fill=ctk.X, pady=4)
 
-        self._section_label(frame_param, "PARÁMETROS DE CARGA")
+        self._section_label(frame_param, "CHARGE PARAMETERS")
 
         grid_frame = ctk.CTkFrame(frame_param, fg_color="transparent")
         grid_frame.pack(fill=ctk.X, padx=12, pady=(0, 4))
@@ -234,17 +234,17 @@ class VoltGuardApp:
         lbl_style = {"font": ("Roboto", 12), "text_color": "#CCCCDD"}
         entry_style = {"width": 80, "fg_color": INPUT_BG, "border_color": INPUT_BORDER, "border_width": 1}
 
-        ctk.CTkLabel(grid_frame, text="Batería mínima (%):", **lbl_style).grid(row=0, column=0, sticky="w", pady=4)
+        ctk.CTkLabel(grid_frame, text="Minimum battery (%):", **lbl_style).grid(row=0, column=0, sticky="w", pady=4)
         self.entry_min = ctk.CTkEntry(grid_frame, **entry_style)
         self.entry_min.grid(row=0, column=1, sticky="e", pady=4)
         self.entry_min.insert(0, str(self.cfg_manager.config.get("min_bat", 20)))
 
-        ctk.CTkLabel(grid_frame, text="Batería máxima (%):", **lbl_style).grid(row=1, column=0, sticky="w", pady=4)
+        ctk.CTkLabel(grid_frame, text="Maximum battery (%):", **lbl_style).grid(row=1, column=0, sticky="w", pady=4)
         self.entry_max = ctk.CTkEntry(grid_frame, **entry_style)
         self.entry_max.grid(row=1, column=1, sticky="e", pady=4)
         self.entry_max.insert(0, str(self.cfg_manager.config.get("max_bat", 95)))
 
-        ctk.CTkLabel(grid_frame, text="Chequeo (segundos):", **lbl_style).grid(row=2, column=0, sticky="w", pady=4)
+        ctk.CTkLabel(grid_frame, text="Check interval (sec):", **lbl_style).grid(row=2, column=0, sticky="w", pady=4)
         self.entry_time = ctk.CTkEntry(grid_frame, **entry_style)
         self.entry_time.grid(row=2, column=1, sticky="e", pady=4)
         self.entry_time.insert(0, str(self.cfg_manager.config.get("check_time", 60)))
@@ -255,7 +255,7 @@ class VoltGuardApp:
             entry.bind("<FocusIn>", lambda e, w=entry: w.configure(border_color=INPUT_FOCUS))
             entry.bind("<FocusOut>", lambda e, w=entry: w.configure(border_color=INPUT_BORDER))
 
-        self.chk_minimized = ctk.CTkCheckBox(frame_param, text="Iniciar minimizada y arrancar monitor automáticamente",
+        self.chk_minimized = ctk.CTkCheckBox(frame_param, text="Start minimized and auto-start monitor",
                                               font=("Roboto", 12), checkbox_width=18, checkbox_height=18,
                                               fg_color=CHK_COLOR, hover_color=CHK_HOVER)
         self.chk_minimized.pack(anchor="w", padx=12, pady=(4, 12))
@@ -266,13 +266,13 @@ class VoltGuardApp:
         frame_btns = ctk.CTkFrame(main_frame, fg_color="transparent")
         frame_btns.pack(fill=ctk.X, pady=(8, 4))
 
-        self.btn_start = ctk.CTkButton(frame_btns, text="▶  INICIAR", command=self.start_monitor,
+        self.btn_start = ctk.CTkButton(frame_btns, text="▶  START", command=self.start_monitor,
                                        fg_color=GREEN, hover_color=GREEN_HOVER,
                                        text_color="white",
                                        font=("Roboto", 13, "bold"), height=40, corner_radius=10)
         self.btn_start.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(0, 4))
 
-        self.btn_stop = ctk.CTkButton(frame_btns, text="⏹  DETENER",
+        self.btn_stop = ctk.CTkButton(frame_btns, text="⏹  STOP",
                                       fg_color=RED_OFF, hover_color=RED_OFF,
                                       text_color="#554444",
                                       font=("Roboto", 13, "bold"), height=40, corner_radius=10)
@@ -281,13 +281,13 @@ class VoltGuardApp:
         frame_utils = ctk.CTkFrame(main_frame, fg_color="transparent")
         frame_utils.pack(fill=ctk.X, pady=(0, 6))
 
-        self.btn_test = ctk.CTkButton(frame_utils, text="🔌  Test Enchufe", command=self.run_test_plug,
+        self.btn_test = ctk.CTkButton(frame_utils, text="🔌  Test Plug", command=self.run_test_plug,
                                       fg_color=TEAL, hover_color=TEAL_HOVER,
                                       text_color="white",
                                       font=("Roboto", 12), height=36, corner_radius=10)
         self.btn_test.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(0, 4))
 
-        self.btn_exit = ctk.CTkButton(frame_utils, text="✖  Salir", command=self.quit_window,
+        self.btn_exit = ctk.CTkButton(frame_utils, text="✖  Exit", command=self.quit_window,
                                       fg_color=GRAY_BTN, hover_color=GRAY_HOVER,
                                       text_color="white",
                                       font=("Roboto", 12), height=36, corner_radius=10)
@@ -296,7 +296,7 @@ class VoltGuardApp:
         # ── Log area ──────────────────────────────────────────────────────────
         log_frame = ctk.CTkFrame(main_frame, fg_color=BG_CARD, corner_radius=12)
         log_frame.pack(fill=ctk.BOTH, expand=True, pady=(4, 0))
-        self._section_label(log_frame, "REGISTRO DE ACTIVIDAD")
+        self._section_label(log_frame, "ACTIVITY LOG")
 
         self.log_area = ctk.CTkTextbox(log_frame, font=("Consolas", 11),
                                        fg_color=BG_INNER, text_color="#B0B8CC",
@@ -337,34 +337,34 @@ class VoltGuardApp:
         if self.backend.running: return
         is_valid, err = self.validate_inputs()
         if not is_valid:
-            self.log(f"Error de validación: {err}", is_error=True)
+            self.log(f"Validation error: {err}", is_error=True)
             return
         if not self.cfg_manager.raw_save(): return
         
         self.backend.running = True
         self.set_gui_state(True)
-        self.set_status("Iniciando conectividad...", "#17a2b8")
-        self.log("---- Arrancando Módulo Principal ----")
+        self.set_status("Starting connectivity...", "#17a2b8")
+        self.log("---- Starting Main Module ----")
         
         self.thread = threading.Thread(target=self._run_async_wrapper, daemon=True)
         self.thread.start()
 
     def stop_monitor(self):
-        self.log("Solicitando detención segura...", is_spam=True)
+        self.log("Requesting safe stop...", is_spam=True)
         self.backend.running = False
-        self.set_status("Deteniendo...", "orange")
+        self.set_status("Stopping...", "orange")
 
     def run_test_plug(self):
         if self.backend.running or self.testing_plug: return
         is_valid, err = self.validate_inputs()
         if not is_valid:
-            self.log(f"Error de validación: {err}", is_error=True)
+            self.log(f"Validation error: {err}", is_error=True)
             return
         if not self.cfg_manager.raw_save(): return
         
         self.testing_plug = True
         self.set_gui_state(True)
-        self.log("Iniciando Secuencia de Prueba de Hardware...")
+        self.log("Starting Hardware Test Sequence...")
         threading.Thread(target=self._test_wrapper, daemon=True).start()
 
     # ================= WRAPPERS ASYNCIO =================
@@ -380,8 +380,8 @@ class VoltGuardApp:
                     loop.run_until_complete(self.backend.monitor_loop())
                 except Exception as e:
                     if not self.backend.running: break
-                    self.log(f"Fallo grave en red/Meross: {e}. Reintentando en 30s.", is_error=True)
-                    self.set_status("Reconectando (Error Red)", "red")
+                    self.log(f"Critical network/Meross failure: {e}. Retrying in 30s.", is_error=True)
+                    self.set_status("Reconnecting (Network Error)", "red")
                     
                     for _ in range(30):
                         if not self.backend.running: break
@@ -389,8 +389,8 @@ class VoltGuardApp:
         finally:
             loop.close()
             self.root.after(0, self.set_gui_state, False)
-            self.root.after(0, self.set_status, "Detenido", "gray")
-            self.log("---- Monitor detenido correctamente ----")
+            self.root.after(0, self.set_status, "Stopped", "gray")
+            self.log("---- Monitor stopped gracefully ----")
 
     def _test_wrapper(self):
         if os.name == 'nt':
@@ -403,4 +403,4 @@ class VoltGuardApp:
             loop.close()
             self.testing_plug = False
             self.root.after(0, self.set_gui_state, False)
-            self.root.after(0, self.set_status, "Detenido", "gray")
+            self.root.after(0, self.set_status, "Stopped", "gray")
