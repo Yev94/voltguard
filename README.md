@@ -2,6 +2,8 @@
 
 # VoltGuard 🔋🔌
 
+[![Download Release v1.0.0](https://img.shields.io/badge/Download-v1.0.0-blue?style=for-the-badge&logo=windows)](https://github.com/Yev94/voltguard/releases/tag/v1.0.0)
+
 ![VoltGuard UI Preview](./image.png)
 
 </div>
@@ -57,6 +59,11 @@ Unless modified, the static core of the program will always reside in:
 
 ## 🛠 Installation and Usage
 
+**Quick Install (Recommended):**
+Download the precompiled installer from the releases page:
+[👉 Download VoltGuard v1.0.0 Installer](https://github.com/Yev94/voltguard/releases/tag/v1.0.0)
+
+**Run from source:**
 1. Go to the project root.
 2. Open a terminal.
 3. Start it:
