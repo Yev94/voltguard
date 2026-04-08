@@ -22,6 +22,12 @@ RED_OFF      = "#3A1A1A"
 TEAL         = "#17B8C8"
 TEAL_HOVER   = "#109AAA"
 TEAL_OFF     = "#0F2E30"
+BLUE         = "#3B82F6"
+BLUE_HOVER   = "#2563EB"
+BLUE_OFF     = "#1E3A8A"
+ORANGE       = "#F97316"
+ORANGE_HOVER = "#EA580C"
+ORANGE_OFF   = "#7C2D12"
 GRAY_BTN     = "#5A5A5A"
 GRAY_HOVER   = "#444444"
 GRAY_OFF     = "#2A2A2A"
@@ -283,6 +289,19 @@ class VoltGuardApp:
                                       font=("Roboto", 13, "bold"), height=40, corner_radius=10)
         self.btn_stop.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(4, 0))
 
+        frame_manual = ctk.CTkFrame(main_frame, fg_color="transparent")
+        frame_manual.pack(fill=ctk.X, pady=(0, 6))
+
+        self.btn_on = ctk.CTkButton(frame_manual, text="⚡  Turn ON", command=self.manual_turn_on,
+                                    fg_color=BLUE, hover_color=BLUE_HOVER, text_color="white",
+                                    font=("Roboto", 12), height=36, corner_radius=10)
+        self.btn_on.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(0, 4))
+
+        self.btn_off = ctk.CTkButton(frame_manual, text="⏏  Turn OFF", command=self.manual_turn_off,
+                                     fg_color=ORANGE, hover_color=ORANGE_HOVER, text_color="white",
+                                     font=("Roboto", 12), height=36, corner_radius=10)
+        self.btn_off.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(4, 0))
+
         frame_utils = ctk.CTkFrame(main_frame, fg_color="transparent")
         frame_utils.pack(fill=ctk.X, pady=(0, 6))
 
@@ -329,6 +348,10 @@ class VoltGuardApp:
                                     text_color="white", command=self.stop_monitor)
             self.btn_test.configure(fg_color=TEAL_OFF, hover_color=TEAL_OFF,
                                     text_color="#1A4040", command=self._noop)
+            self.btn_on.configure(fg_color=BLUE_OFF, hover_color=BLUE_OFF,
+                                  text_color="#1E3050", command=self._noop)
+            self.btn_off.configure(fg_color=ORANGE_OFF, hover_color=ORANGE_OFF,
+                                   text_color="#4A2010", command=self._noop)
         else:
             self.btn_start.configure(fg_color=GREEN, hover_color=GREEN_HOVER,
                                      text_color="white", command=self.start_monitor)
@@ -336,6 +359,10 @@ class VoltGuardApp:
                                     text_color="#554444", command=self._noop)
             self.btn_test.configure(fg_color=TEAL, hover_color=TEAL_HOVER,
                                     text_color="white", command=self.run_test_plug)
+            self.btn_on.configure(fg_color=BLUE, hover_color=BLUE_HOVER,
+                                  text_color="white", command=self.manual_turn_on)
+            self.btn_off.configure(fg_color=ORANGE, hover_color=ORANGE_HOVER,
+                                   text_color="white", command=self.manual_turn_off)
 
     # ================= LOGICA DE ARRANQUE =================
     def start_monitor(self):
@@ -372,6 +399,26 @@ class VoltGuardApp:
         self.log("Starting Hardware Test Sequence...")
         threading.Thread(target=self._test_wrapper, daemon=True).start()
 
+    def manual_turn_on(self):
+        self._manual_action(True)
+
+    def manual_turn_off(self):
+        self._manual_action(False)
+
+    def _manual_action(self, turn_on):
+        if self.backend.running or self.testing_plug: return
+        is_valid, err = self.validate_inputs()
+        if not is_valid:
+            self.log(f"Validation error: {err}", is_error=True)
+            return
+        if not self.cfg_manager.raw_save(): return
+        
+        self.testing_plug = True
+        self.set_gui_state(True)
+        action = "ON" if turn_on else "OFF"
+        self.log(f"Manual control: Turning {action}...")
+        threading.Thread(target=self._manual_wrapper, args=(turn_on,), daemon=True).start()
+
     # ================= WRAPPERS ASYNCIO =================
     def _run_async_wrapper(self):
         if os.name == 'nt':
@@ -404,6 +451,19 @@ class VoltGuardApp:
         asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(self.backend.async_test_plug())
+        finally:
+            loop.close()
+            self.testing_plug = False
+            self.root.after(0, self.set_gui_state, False)
+            self.root.after(0, self.set_status, "Stopped", "gray")
+
+    def _manual_wrapper(self, turn_on):
+        if os.name == 'nt':
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self.backend.async_manual_control(turn_on))
         finally:
             loop.close()
             self.testing_plug = False

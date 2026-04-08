@@ -50,6 +50,38 @@ class BatteryBackend:
                 if 'http_client' in locals(): await http_client.async_logout()
             except: pass
 
+    async def async_manual_control(self, turn_on: bool):
+        action = "Encendiendo" if turn_on else "Apagando"
+        self.set_status(f"{action} Manual...", "orange")
+        try:
+            http_client = await MerossHttpClient.async_from_user_password(
+                api_base_url="https://iotx-eu.meross.com",
+                email=self.cfg.config["email"], password=self.cfg.password)
+            manager = MerossManager(http_client=http_client)
+            await manager.async_init()
+            await manager.async_device_discovery()
+            plugs = manager.find_devices()
+            plug = next((p for p in plugs if p.uuid == self.cfg.config["uuid"]), None)
+            
+            if not plug:
+                self.log(f"❌ No se encontró el enchufe con UUID {self.cfg.config['uuid']}.", is_error=True)
+            else:
+                self.log(f"🔌 Manual: {action} '{plug.name}'...")
+                if turn_on:
+                    await plug.async_turn_on()
+                else:
+                    await plug.async_turn_off()
+                await plug.async_update()
+                self.log(f"✅ {action} completado.")
+                
+        except Exception as e:
+            self.log(f"❌ Error de Control Manual: {e}", is_error=True)
+        finally:
+            try:
+                if 'manager' in locals(): manager.close()
+                if 'http_client' in locals(): await http_client.async_logout()
+            except: pass
+
     async def monitor_loop(self):
         self.set_status("Conectando...", "orange")
         http_api_client = None
