@@ -1,5 +1,7 @@
 # VoltGuard 🔋🔌
 
+![VoltGuard UI Preview](./image.png)
+
 Una aplicación nativa de Windows residente, asíncrona y modular diseñada para **monitorizar la batería de un portátil**, y encender/apagar de forma automatizada un enchufe inteligente de la marca **Meross** basado en umbrales de energía configurables. Creada desde cero priorizando la estabilidad, la conexión local persistente y el bajo consumo de recursos (Daemon).
 
 ## 🚀 Características Principales
@@ -42,10 +44,10 @@ Este proyecto aplica separación de responsabilidades para favorecer mantenimien
 
 ### Rutas Persistentes
 Salvo modificación, el núcleo estático del programa siempre descansará en:
-> `C:\Users\TU_USUARIO\AppData\Roaming\MerossBatteryMonitor`
+> `C:\Users\TU_USUARIO\AppData\Roaming\VoltGuard`
 
 - `config.json`: Almacena exclusivamente el Email, el UUID del enchufe y los umbrales estadísticos de checkeo asintótico en tiempo plano.
-- `meross_battery.log`: Registro acotado con auto-borrado (Rotación de fichero a ~1MB de peso máximo con 3 slots temporales en disco) para debug a fondo si falla la UI visual normal del Front.
+- `voltguard.log`: Registro acotado con auto-borrado (Rotación de fichero a ~1MB de peso máximo con 3 slots temporales en disco) para debug a fondo si falla la UI visual normal del Front.
 
 ---
 

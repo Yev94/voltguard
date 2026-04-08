@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from src.logger_config import APP_DIR, get_logger
 
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
-KEYRING_SERVICE = "MerossBatteryMonitor"
+KEYRING_SERVICE = "VoltGuard"
 logger = get_logger()
 
 class ConfigManager:

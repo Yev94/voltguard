@@ -2,9 +2,9 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 
-APP_DIR = os.path.join(os.getenv("APPDATA"), "MerossBatteryMonitor")
+APP_DIR = os.path.join(os.getenv("APPDATA"), "VoltGuard")
 os.makedirs(APP_DIR, exist_ok=True)
-LOG_FILE = os.path.join(APP_DIR, "meross_battery.log")
+LOG_FILE = os.path.join(APP_DIR, "voltguard.log")
 
 def get_logger(name="bateria"):
     logger = logging.getLogger(name)

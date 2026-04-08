@@ -33,10 +33,10 @@ INPUT_FOCUS  = "#444444"
 CHK_COLOR    = "#2DB87A"
 CHK_HOVER    = "#249960"
 
-class MerossBatteryApp:
+class VoltGuardApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Meross Battery Monitor")
+        self.root.title("VoltGuard")
         self.root.geometry("500x800")
         self.root.resizable(False, False)
 
@@ -89,7 +89,7 @@ class MerossBatteryApp:
             return Image.open(self._logo_path).resize((64, 64))
         image = Image.new('RGB', (64, 64), color=(30, 30, 46))
         d = ImageDraw.Draw(image)
-        d.text((10, 20), "MBM", fill=(79, 142, 247))
+        d.text((10, 20), "VG", fill=(79, 142, 247))
         return image
 
     def _run_tray(self):
@@ -98,7 +98,7 @@ class MerossBatteryApp:
                 pystray.MenuItem('Abrir', self.show_window, default=True),
                 pystray.MenuItem('Salir', self.quit_window)
             )
-            self.tray_icon = pystray.Icon("MerossBattery", self._crear_icono_tray(), "Meross Monitor", menu)
+            self.tray_icon = pystray.Icon("VoltGuard", self._crear_icono_tray(), "VoltGuard", menu)
             self.tray_icon.run()
         finally:
             self.tray_starting = False
@@ -186,7 +186,7 @@ class MerossBatteryApp:
 
         title_block = ctk.CTkFrame(header, fg_color="transparent")
         title_block.pack(side=ctk.LEFT, pady=12)
-        ctk.CTkLabel(title_block, text="Meross Battery Monitor",
+        ctk.CTkLabel(title_block, text="VoltGuard",
                      font=("Roboto", 18, "bold"), text_color="white").pack(anchor="w")
         ctk.CTkLabel(title_block, text="Control automático de carga",
                      font=("Roboto", 11), text_color="#8888AA").pack(anchor="w")
