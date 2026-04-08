@@ -1,6 +1,10 @@
+<div align="center">
+
 # VoltGuard 🔋🔌
 
 ![VoltGuard UI Preview](./image.png)
+
+</div>
 
 Una aplicación nativa de Windows residente, asíncrona y modular diseñada para **monitorizar la batería de un portátil**, y encender/apagar de forma automatizada un enchufe inteligente de la marca **Meross** basado en umbrales de energía configurables. Creada desde cero priorizando la estabilidad, la conexión local persistente y el bajo consumo de recursos (Daemon).
 
