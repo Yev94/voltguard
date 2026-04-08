@@ -3,7 +3,7 @@ import os
 import threading
 import time
 from datetime import datetime
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageTk
 import customtkinter as ctk
 import pystray
 
@@ -13,13 +13,39 @@ from src.battery_backend import BatteryBackend
 
 logger = get_logger()
 
+GREEN        = "#2DB87A"
+GREEN_HOVER  = "#249960"
+GREEN_OFF    = "#1A3A2A"
+RED          = "#E0404A"
+RED_HOVER    = "#C0323B"
+RED_OFF      = "#3A1A1A"
+TEAL         = "#17B8C8"
+TEAL_HOVER   = "#109AAA"
+TEAL_OFF     = "#0F2E30"
+GRAY_BTN     = "#5A5A5A"
+GRAY_HOVER   = "#444444"
+GRAY_OFF     = "#2A2A2A"
+BG_CARD      = "#141414"
+BG_INNER     = "#1C1C1C"
+INPUT_BG     = "#222222"
+INPUT_BORDER = "#333333"
+INPUT_FOCUS  = "#444444"
+CHK_COLOR    = "#2DB87A"
+CHK_HOVER    = "#249960"
+
 class MerossBatteryApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Monitor Batería -> Meross")
-        self.root.geometry("450x720")
+        self.root.title("Meross Battery Monitor")
+        self.root.geometry("500x800")
         self.root.resizable(False, False)
-        
+
+        base_dir = os.path.dirname(os.path.dirname(__file__))
+        self._ico_path = os.path.join(base_dir, "logo.ico")
+        self._logo_path = os.path.join(base_dir, "logo.png")
+        if os.path.exists(self._ico_path):
+            self.root.after(100, lambda: self.root.iconbitmap(self._ico_path))
+
         ctk.set_appearance_mode("Dark")
         ctk.set_default_color_theme("blue")
         
@@ -55,13 +81,15 @@ class MerossBatteryApp:
         self.log_area.configure(state="disabled")
 
     def set_status(self, text, color="white"):
-        self.root.after(0, lambda: self.status_label.configure(text=f"Estado: {text}", text_color=color))
+        self.root.after(0, lambda: self.status_label.configure(text=text, text_color=color))
 
     # ================= PYSTRAY (WINDOW MGMT) =================
     def _crear_icono_tray(self):
-        image = Image.new('RGB', (64, 64), color=(30, 30, 30))
+        if os.path.exists(self._logo_path):
+            return Image.open(self._logo_path).resize((64, 64))
+        image = Image.new('RGB', (64, 64), color=(30, 30, 46))
         d = ImageDraw.Draw(image)
-        d.text((10, 20), "MBM", fill=(0, 255, 150))
+        d.text((10, 20), "MBM", fill=(79, 142, 247))
         return image
 
     def _run_tray(self):
@@ -139,80 +167,145 @@ class MerossBatteryApp:
         except ValueError as e:
             return False, str(e)
 
+    def _section_label(self, parent, text):
+        ctk.CTkLabel(parent, text=text, font=("Roboto", 11, "bold"),
+                     text_color="#8888AA").pack(anchor="w", padx=12, pady=(10, 2))
+
     def build_ui(self):
         main_frame = ctk.CTkFrame(self.root, fg_color="transparent")
-        main_frame.pack(fill=ctk.BOTH, expand=True, padx=20, pady=10)
-        
-        lbl_title = ctk.CTkLabel(main_frame, text="Monitor de Batería Meross", font=("Roboto", 20, "bold"))
-        lbl_title.pack(pady=(0, 5))
-        
-        self.status_label = ctk.CTkLabel(main_frame, text="Estado: Detenido", text_color="gray")
-        self.status_label.pack(pady=(0, 10))
+        main_frame.pack(fill=ctk.BOTH, expand=True, padx=18, pady=10)
 
-        frame_cred = ctk.CTkFrame(main_frame)
-        frame_cred.pack(fill=ctk.X, pady=5)
-        
-        ctk.CTkLabel(frame_cred, text="Email de Meross:").pack(anchor="w", padx=10, pady=(5,0))
-        self.entry_email = ctk.CTkEntry(frame_cred, placeholder_text="ejemplo@google.com")
-        self.entry_email.pack(fill=ctk.X, padx=10, pady=(0, 5))
+        # ── Header: logo + title ──────────────────────────────────────────────
+        header = ctk.CTkFrame(main_frame, fg_color=BG_CARD, corner_radius=14)
+        header.pack(fill=ctk.X, pady=(0, 10))
+
+        if os.path.exists(self._logo_path):
+            pil_logo = Image.open(self._logo_path)
+            ctk_logo = ctk.CTkImage(light_image=pil_logo, dark_image=pil_logo, size=(52, 52))
+            ctk.CTkLabel(header, image=ctk_logo, text="").pack(side=ctk.LEFT, padx=(14, 8), pady=12)
+
+        title_block = ctk.CTkFrame(header, fg_color="transparent")
+        title_block.pack(side=ctk.LEFT, pady=12)
+        ctk.CTkLabel(title_block, text="Meross Battery Monitor",
+                     font=("Roboto", 18, "bold"), text_color="white").pack(anchor="w")
+        ctk.CTkLabel(title_block, text="Control automático de carga",
+                     font=("Roboto", 11), text_color="#8888AA").pack(anchor="w")
+        self.status_label = ctk.CTkLabel(title_block, text="Detenido",
+                                         font=("Roboto", 11, "bold"), text_color="#888899")
+        self.status_label.pack(anchor="w")
+
+        # ── Credentials ───────────────────────────────────────────────────────
+        frame_cred = ctk.CTkFrame(main_frame, fg_color=BG_CARD, corner_radius=12)
+        frame_cred.pack(fill=ctk.X, pady=4)
+
+        self._section_label(frame_cred, "CREDENCIALES MEROSS")
+
+        entry_cfg = {"fg_color": INPUT_BG, "border_color": INPUT_BORDER, "border_width": 1}
+
+        ctk.CTkLabel(frame_cred, text="Email:", font=("Roboto", 12),
+                     text_color="#CCCCDD").pack(anchor="w", padx=12)
+        self.entry_email = ctk.CTkEntry(frame_cred, placeholder_text="ejemplo@gmail.com", **entry_cfg)
+        self.entry_email.pack(fill=ctk.X, padx=12, pady=(2, 6))
         self.entry_email.insert(0, self.cfg_manager.config.get("email", ""))
-        
-        ctk.CTkLabel(frame_cred, text="Contraseña:").pack(anchor="w", padx=10, pady=(5,0))
-        self.entry_password = ctk.CTkEntry(frame_cred, placeholder_text="********", show="*")
-        self.entry_password.pack(fill=ctk.X, padx=10, pady=(0, 5))
-        if self.cfg_manager.password: self.entry_password.insert(0, "********")
 
-        ctk.CTkLabel(frame_cred, text="UUID del Enchufe:").pack(anchor="w", padx=10, pady=(5,0))
-        self.entry_uuid = ctk.CTkEntry(frame_cred, placeholder_text="2404083...")
-        self.entry_uuid.pack(fill=ctk.X, padx=10, pady=(0, 10))
+        ctk.CTkLabel(frame_cred, text="Contraseña:", font=("Roboto", 12),
+                     text_color="#CCCCDD").pack(anchor="w", padx=12)
+        self.entry_password = ctk.CTkEntry(frame_cred, placeholder_text="••••••••", show="*", **entry_cfg)
+        self.entry_password.pack(fill=ctk.X, padx=12, pady=(2, 6))
+        if self.cfg_manager.password:
+            self.entry_password.insert(0, "********")
+
+        ctk.CTkLabel(frame_cred, text="UUID del Enchufe:", font=("Roboto", 12),
+                     text_color="#CCCCDD").pack(anchor="w", padx=12)
+        self.entry_uuid = ctk.CTkEntry(frame_cred, placeholder_text="2404083...", **entry_cfg)
+        self.entry_uuid.pack(fill=ctk.X, padx=12, pady=(2, 12))
         self.entry_uuid.insert(0, self.cfg_manager.config.get("uuid", ""))
 
-        frame_param = ctk.CTkFrame(main_frame)
-        frame_param.pack(fill=ctk.X, pady=10)
-        
+        # ── Parameters ────────────────────────────────────────────────────────
+        frame_param = ctk.CTkFrame(main_frame, fg_color=BG_CARD, corner_radius=12)
+        frame_param.pack(fill=ctk.X, pady=4)
+
+        self._section_label(frame_param, "PARÁMETROS DE CARGA")
+
         grid_frame = ctk.CTkFrame(frame_param, fg_color="transparent")
-        grid_frame.pack(padx=10, pady=10)
-        
-        ctk.CTkLabel(grid_frame, text="Batería Baja (%):").grid(row=0, column=0, sticky="w", pady=5)
-        self.entry_min = ctk.CTkEntry(grid_frame, width=80)
-        self.entry_min.grid(row=0, column=1, padx=10)
+        grid_frame.pack(fill=ctk.X, padx=12, pady=(0, 4))
+        grid_frame.columnconfigure(1, weight=1)
+
+        lbl_style = {"font": ("Roboto", 12), "text_color": "#CCCCDD"}
+        entry_style = {"width": 80, "fg_color": INPUT_BG, "border_color": INPUT_BORDER, "border_width": 1}
+
+        ctk.CTkLabel(grid_frame, text="Batería mínima (%):", **lbl_style).grid(row=0, column=0, sticky="w", pady=4)
+        self.entry_min = ctk.CTkEntry(grid_frame, **entry_style)
+        self.entry_min.grid(row=0, column=1, sticky="e", pady=4)
         self.entry_min.insert(0, str(self.cfg_manager.config.get("min_bat", 20)))
-        
-        ctk.CTkLabel(grid_frame, text="Batería Completa (%):").grid(row=1, column=0, sticky="w", pady=5)
-        self.entry_max = ctk.CTkEntry(grid_frame, width=80)
-        self.entry_max.grid(row=1, column=1, padx=10)
+
+        ctk.CTkLabel(grid_frame, text="Batería máxima (%):", **lbl_style).grid(row=1, column=0, sticky="w", pady=4)
+        self.entry_max = ctk.CTkEntry(grid_frame, **entry_style)
+        self.entry_max.grid(row=1, column=1, sticky="e", pady=4)
         self.entry_max.insert(0, str(self.cfg_manager.config.get("max_bat", 95)))
-        
-        ctk.CTkLabel(grid_frame, text="Chequeo (segundos):").grid(row=2, column=0, sticky="w", pady=5)
-        self.entry_time = ctk.CTkEntry(grid_frame, width=80)
-        self.entry_time.grid(row=2, column=1, padx=10)
+
+        ctk.CTkLabel(grid_frame, text="Chequeo (segundos):", **lbl_style).grid(row=2, column=0, sticky="w", pady=4)
+        self.entry_time = ctk.CTkEntry(grid_frame, **entry_style)
+        self.entry_time.grid(row=2, column=1, sticky="e", pady=4)
         self.entry_time.insert(0, str(self.cfg_manager.config.get("check_time", 60)))
-        
-        self.chk_minimized = ctk.CTkCheckBox(frame_param, text="Abrir minimizada y arrancar monitor")
-        self.chk_minimized.pack(pady=10)
-        if self.cfg_manager.config.get("start_minimized"): self.chk_minimized.select()
-        
+
+        # Focus glow on all entries
+        for entry in (self.entry_email, self.entry_password, self.entry_uuid,
+                      self.entry_min, self.entry_max, self.entry_time):
+            entry.bind("<FocusIn>", lambda e, w=entry: w.configure(border_color=INPUT_FOCUS))
+            entry.bind("<FocusOut>", lambda e, w=entry: w.configure(border_color=INPUT_BORDER))
+
+        self.chk_minimized = ctk.CTkCheckBox(frame_param, text="Iniciar minimizada y arrancar monitor automáticamente",
+                                              font=("Roboto", 12), checkbox_width=18, checkbox_height=18,
+                                              fg_color=CHK_COLOR, hover_color=CHK_HOVER)
+        self.chk_minimized.pack(anchor="w", padx=12, pady=(4, 12))
+        if self.cfg_manager.config.get("start_minimized"):
+            self.chk_minimized.select()
+
+        # ── Action buttons ────────────────────────────────────────────────────
         frame_btns = ctk.CTkFrame(main_frame, fg_color="transparent")
-        frame_btns.pack(fill=ctk.X, pady=10)
-        
-        self.btn_start = ctk.CTkButton(frame_btns, text="▶ START", command=self.start_monitor, fg_color="#28a745", hover_color="#218838", width=100)
-        self.btn_start.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=5)
-        
-        self.btn_stop = ctk.CTkButton(frame_btns, text="⏹ STOP", command=self.stop_monitor, fg_color="#dc3545", hover_color="#c82333", state="disabled", width=100)
-        self.btn_stop.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=5)
-        
+        frame_btns.pack(fill=ctk.X, pady=(8, 4))
+
+        self.btn_start = ctk.CTkButton(frame_btns, text="▶  INICIAR", command=self.start_monitor,
+                                       fg_color=GREEN, hover_color=GREEN_HOVER,
+                                       text_color="white",
+                                       font=("Roboto", 13, "bold"), height=40, corner_radius=10)
+        self.btn_start.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(0, 4))
+
+        self.btn_stop = ctk.CTkButton(frame_btns, text="⏹  DETENER",
+                                      fg_color=RED_OFF, hover_color=RED_OFF,
+                                      text_color="#554444",
+                                      font=("Roboto", 13, "bold"), height=40, corner_radius=10)
+        self.btn_stop.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(4, 0))
+
         frame_utils = ctk.CTkFrame(main_frame, fg_color="transparent")
-        frame_utils.pack(fill=ctk.X, pady=5)
-        
-        self.btn_test = ctk.CTkButton(frame_utils, text="🔌 Test Enchufe", command=self.run_test_plug, fg_color="#17a2b8", hover_color="#138496")
-        self.btn_test.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=5)
-        
-        self.btn_exit = ctk.CTkButton(frame_utils, text="✖ Salir", command=self.quit_window, fg_color="gray", hover_color="#5a5a5a")
-        self.btn_exit.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=5)
-        
-        self.log_area = ctk.CTkTextbox(main_frame, height=130, font=("Consolas", 11))
-        self.log_area.pack(fill=ctk.BOTH, expand=True, pady=10)
+        frame_utils.pack(fill=ctk.X, pady=(0, 6))
+
+        self.btn_test = ctk.CTkButton(frame_utils, text="🔌  Test Enchufe", command=self.run_test_plug,
+                                      fg_color=TEAL, hover_color=TEAL_HOVER,
+                                      text_color="white",
+                                      font=("Roboto", 12), height=36, corner_radius=10)
+        self.btn_test.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(0, 4))
+
+        self.btn_exit = ctk.CTkButton(frame_utils, text="✖  Salir", command=self.quit_window,
+                                      fg_color=GRAY_BTN, hover_color=GRAY_HOVER,
+                                      text_color="white",
+                                      font=("Roboto", 12), height=36, corner_radius=10)
+        self.btn_exit.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(4, 0))
+
+        # ── Log area ──────────────────────────────────────────────────────────
+        log_frame = ctk.CTkFrame(main_frame, fg_color=BG_CARD, corner_radius=12)
+        log_frame.pack(fill=ctk.BOTH, expand=True, pady=(4, 0))
+        self._section_label(log_frame, "REGISTRO DE ACTIVIDAD")
+
+        self.log_area = ctk.CTkTextbox(log_frame, font=("Consolas", 11),
+                                       fg_color=BG_INNER, text_color="#B0B8CC",
+                                       corner_radius=8, border_width=0)
+        self.log_area.pack(fill=ctk.BOTH, expand=True, padx=10, pady=(0, 10))
         self.log_area.configure(state="disabled")
+
+    def _noop(self):
+        pass
 
     def set_gui_state(self, is_running):
         state = "disabled" if is_running else "normal"
@@ -223,10 +316,21 @@ class MerossBatteryApp:
         self.entry_max.configure(state=state)
         self.entry_time.configure(state=state)
         self.chk_minimized.configure(state=state)
-        
-        self.btn_start.configure(state="disabled" if is_running else "normal")
-        self.btn_stop.configure(state="normal" if is_running else "disabled")
-        self.btn_test.configure(state="disabled" if is_running else "normal")
+
+        if is_running:
+            self.btn_start.configure(fg_color=GREEN_OFF, hover_color=GREEN_OFF,
+                                     text_color="#2A4A35", command=self._noop)
+            self.btn_stop.configure(fg_color=RED, hover_color=RED_HOVER,
+                                    text_color="white", command=self.stop_monitor)
+            self.btn_test.configure(fg_color=TEAL_OFF, hover_color=TEAL_OFF,
+                                    text_color="#1A4040", command=self._noop)
+        else:
+            self.btn_start.configure(fg_color=GREEN, hover_color=GREEN_HOVER,
+                                     text_color="white", command=self.start_monitor)
+            self.btn_stop.configure(fg_color=RED_OFF, hover_color=RED_OFF,
+                                    text_color="#554444", command=self._noop)
+            self.btn_test.configure(fg_color=TEAL, hover_color=TEAL_HOVER,
+                                    text_color="white", command=self.run_test_plug)
 
     # ================= LOGICA DE ARRANQUE =================
     def start_monitor(self):
