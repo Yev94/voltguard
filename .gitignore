@@ -1,3 +1,13 @@
 config.json
 meross_battery.log
-*/__pycache__/**/*
+__pycache__/
+*/__pycache__/*
+*.pyc
+
+# PyInstaller folders
+build/
+dist/
+*.spec
+
+# Inno Setup output
+Release/

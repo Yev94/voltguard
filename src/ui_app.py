@@ -40,7 +40,12 @@ class VoltGuardApp:
         self.root.geometry("500x800")
         self.root.resizable(False, False)
 
-        base_dir = os.path.dirname(os.path.dirname(__file__))
+        import sys
+        try:
+            base_dir = sys._MEIPASS
+        except AttributeError:
+            base_dir = os.path.dirname(os.path.dirname(__file__))
+        
         self._ico_path = os.path.join(base_dir, "logo.ico")
         self._logo_path = os.path.join(base_dir, "logo.png")
         if os.path.exists(self._ico_path):
