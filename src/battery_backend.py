@@ -1,8 +1,5 @@
 import asyncio
-import os
 import psutil
-import time
-from src.logger_config import get_logger
 from meross_iot.http_api import MerossHttpClient
 from meross_iot.manager import MerossManager
 
@@ -56,7 +53,7 @@ class BatteryBackend:
             try:
                 if 'manager' in locals(): manager.close()
                 if 'http_client' in locals(): await http_client.async_logout()
-            except: pass
+            except Exception: pass
 
     async def async_manual_control(self, turn_on: bool):
         action = "Turning ON" if turn_on else "Turning OFF"
@@ -80,6 +77,7 @@ class BatteryBackend:
                 else:
                     await plug.async_turn_off()
                 await plug.async_update()
+                self.last_command = "on" if plug.is_on() else "off"
                 self.log(f"✅ {action} completed.")
                 
         except Exception as e:
@@ -88,7 +86,7 @@ class BatteryBackend:
             try:
                 if 'manager' in locals(): manager.close()
                 if 'http_client' in locals(): await http_client.async_logout()
-            except: pass
+            except Exception: pass
 
     async def monitor_loop(self):
         self.set_status("Connecting...", "orange")
@@ -110,7 +108,9 @@ class BatteryBackend:
                 return
             
             await plug.async_update()
+            self.last_command = "on" if plug.is_on() else "off"
             self.log(f"✅ Connected and Bound to '{plug.name}'")
+            self.log(f"⚙️ Monitor started | Min: {self.cfg.config['min_bat']}% | Max: {self.cfg.config['max_bat']}% | Check: {self.cfg.config['check_time']}s")
             self.set_status(f"Monitoring ({plug.name})", "#28a745")
             
             self.last_status = None
@@ -126,37 +126,43 @@ class BatteryBackend:
                 
                 bucket = porcentaje // 5
                 
-                # El estado del enchufe ahora es pasivo en el log, usamos last_command o "Desconocido" inicialmente
                 enc_pasivo = self.last_command if self.last_command else "?" 
                 status = f"{bucket}-{cargando}-{enc_pasivo}"
                 
                 if status != self.last_status:
                     est = "Charging" if cargando else "Discharging"
-                    self.log(f"🔋 Battery: {porcentaje}% | {est} | Plug Cache: {enc_pasivo.upper() if enc_pasivo != '?' else '?'}")
+                    self.log(f"🔋 Battery: {porcentaje}% | {est} | Last Action: {enc_pasivo.upper() if enc_pasivo != '?' else '?'}")
                     self.last_status = status
                 
-                # Lógica simplificada basada solo en batería:
                 if porcentaje <= self.cfg.config["min_bat"] and not cargando:
                     if self.last_command != "on":
-                        # Toca encender. Comprobamos su estado real primero.
                         await plug.async_update()
                         if not plug.is_on():
-                            self.log(f"⚡ Low Battery ({porcentaje}%). Triggering ON.")
+                            self.log(f"⚡ Low Battery ({porcentaje}%). Turning ON plug.")
                             await plug.async_turn_on()
+                            await plug.async_update()
+                            if plug.is_on():
+                                self.last_command = "on"
+                            else:
+                                self.log("❌ Could not confirm plug turned ON.", is_error=True)
                         else:
-                            self.log(f"⚡ Low Battery ({porcentaje}%). Enchufe ya estaba ON externamente.")
-                        self.last_command = "on"
+                            self.log(f"⚡ Low Battery ({porcentaje}%). Plug was already ON externally.")
+                            self.last_command = "on"
                         
                 elif porcentaje >= self.cfg.config["max_bat"] and cargando:
                     if self.last_command != "off":
-                        # Toca apagar. Comprobamos su estado real primero.
                         await plug.async_update()
                         if plug.is_on():
-                            self.log(f"🛡 Battery Charged ({porcentaje}%). Triggering OFF.")
+                            self.log(f"🛡 Battery Charged ({porcentaje}%). Turning OFF plug.")
                             await plug.async_turn_off()
+                            await plug.async_update()
+                            if not plug.is_on():
+                                self.last_command = "off"
+                            else:
+                                self.log("❌ Could not confirm plug turned OFF.", is_error=True)
                         else:
-                            self.log(f"🛡 Battery Charged ({porcentaje}%). Enchufe ya estaba OFF externamente.")
-                        self.last_command = "off"
+                            self.log(f"🛡 Battery Charged ({porcentaje}%). Plug was already OFF externally.")
+                            self.last_command = "off"
                 
                 for _ in range(self.cfg.config["check_time"]):
                     if not self.running: break
@@ -166,4 +172,4 @@ class BatteryBackend:
             try:
                 if manager: manager.close()
                 if http_api_client: await http_api_client.async_logout()
-            except: pass
+            except Exception: pass
