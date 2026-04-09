@@ -22,12 +22,12 @@ RED_OFF      = "#3A1A1A"
 TEAL         = "#17B8C8"
 TEAL_HOVER   = "#109AAA"
 TEAL_OFF     = "#0F2E30"
+YELLOW       = "#EAB308"
+YELLOW_HOVER = "#CA9A06"
+YELLOW_OFF   = "#713F12"
 BLUE         = "#3B82F6"
 BLUE_HOVER   = "#2563EB"
 BLUE_OFF     = "#1E3A8A"
-ORANGE       = "#F97316"
-ORANGE_HOVER = "#EA580C"
-ORANGE_OFF   = "#7C2D12"
 GRAY_BTN     = "#5A5A5A"
 GRAY_HOVER   = "#444444"
 GRAY_OFF     = "#2A2A2A"
@@ -43,7 +43,7 @@ class VoltGuardApp:
     def __init__(self, root):
         self.root = root
         self.root.title("VoltGuard")
-        self.root.geometry("500x800")
+        self.root.geometry("500x900+500+100")
         self.root.resizable(False, False)
 
         import sys
@@ -293,12 +293,12 @@ class VoltGuardApp:
         frame_manual.pack(fill=ctk.X, pady=(0, 6))
 
         self.btn_on = ctk.CTkButton(frame_manual, text="⚡  Turn ON", command=self.manual_turn_on,
-                                    fg_color=BLUE, hover_color=BLUE_HOVER, text_color="white",
+                                    fg_color=YELLOW, hover_color=YELLOW_HOVER, text_color="black",
                                     font=("Roboto", 12), height=36, corner_radius=10)
         self.btn_on.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(0, 4))
 
         self.btn_off = ctk.CTkButton(frame_manual, text="⏏  Turn OFF", command=self.manual_turn_off,
-                                     fg_color=ORANGE, hover_color=ORANGE_HOVER, text_color="white",
+                                     fg_color=BLUE, hover_color=BLUE_HOVER, text_color="white",
                                      font=("Roboto", 12), height=36, corner_radius=10)
         self.btn_off.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(4, 0))
 
@@ -348,10 +348,10 @@ class VoltGuardApp:
                                     text_color="white", command=self.stop_monitor)
             self.btn_test.configure(fg_color=TEAL_OFF, hover_color=TEAL_OFF,
                                     text_color="#1A4040", command=self._noop)
-            self.btn_on.configure(fg_color=BLUE_OFF, hover_color=BLUE_OFF,
-                                  text_color="#1E3050", command=self._noop)
-            self.btn_off.configure(fg_color=ORANGE_OFF, hover_color=ORANGE_OFF,
-                                   text_color="#4A2010", command=self._noop)
+            self.btn_on.configure(fg_color=YELLOW_OFF, hover_color=YELLOW_OFF,
+                                  text_color="#4A3010", command=self._noop)
+            self.btn_off.configure(fg_color=BLUE_OFF, hover_color=BLUE_OFF,
+                                   text_color="#1E3050", command=self._noop)
         else:
             self.btn_start.configure(fg_color=GREEN, hover_color=GREEN_HOVER,
                                      text_color="white", command=self.start_monitor)
@@ -359,9 +359,9 @@ class VoltGuardApp:
                                     text_color="#554444", command=self._noop)
             self.btn_test.configure(fg_color=TEAL, hover_color=TEAL_HOVER,
                                     text_color="white", command=self.run_test_plug)
-            self.btn_on.configure(fg_color=BLUE, hover_color=BLUE_HOVER,
-                                  text_color="white", command=self.manual_turn_on)
-            self.btn_off.configure(fg_color=ORANGE, hover_color=ORANGE_HOVER,
+            self.btn_on.configure(fg_color=YELLOW, hover_color=YELLOW_HOVER,
+                                  text_color="black", command=self.manual_turn_on)
+            self.btn_off.configure(fg_color=BLUE, hover_color=BLUE_HOVER,
                                    text_color="white", command=self.manual_turn_off)
 
     # ================= LOGICA DE ARRANQUE =================

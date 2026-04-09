@@ -16,7 +16,7 @@ class BatteryBackend:
         self.last_action_ts = 0
 
     async def async_test_plug(self):
-        self.set_status("Probando Hardware...", "orange")
+        self.set_status("Testing Hardware...", "orange")
         try:
             http_client = await MerossHttpClient.async_from_user_password(
                 api_base_url="https://iotx-eu.meross.com",
@@ -28,22 +28,22 @@ class BatteryBackend:
             plug = next((p for p in plugs if p.uuid == self.cfg.config["uuid"]), None)
             
             if not plug:
-                self.log(f"❌ No se encontró el enchufe con UUID {self.cfg.config['uuid']}.", is_error=True)
+                self.log(f"❌ Could not find plug with UUID {self.cfg.config['uuid']}.", is_error=True)
             else:
-                self.log(f"📡 Testeando '{plug.name}': Encendiendo...")
+                self.log(f"📡 Testing '{plug.name}': Turning ON...")
                 await plug.async_turn_on()
                 await plug.async_update()
                 
                 await asyncio.sleep(2)
                 
-                self.log(f"📡 Testeando '{plug.name}': Apagando...")
+                self.log(f"📡 Testing '{plug.name}': Turning OFF...")
                 await plug.async_turn_off()
                 await plug.async_update()
                 
-                self.log("✅ Prueba Finalizada OK")
+                self.log("✅ Test Finished OK")
                 
         except Exception as e:
-            self.log(f"❌ Error de Hardware Test: {e}", is_error=True)
+            self.log(f"❌ Hardware Test Error: {e}", is_error=True)
         finally:
             try:
                 if 'manager' in locals(): manager.close()
@@ -51,7 +51,7 @@ class BatteryBackend:
             except: pass
 
     async def async_manual_control(self, turn_on: bool):
-        action = "Encendiendo" if turn_on else "Apagando"
+        action = "Turning ON" if turn_on else "Turning OFF"
         self.set_status(f"{action} Manual...", "orange")
         try:
             http_client = await MerossHttpClient.async_from_user_password(
@@ -64,7 +64,7 @@ class BatteryBackend:
             plug = next((p for p in plugs if p.uuid == self.cfg.config["uuid"]), None)
             
             if not plug:
-                self.log(f"❌ No se encontró el enchufe con UUID {self.cfg.config['uuid']}.", is_error=True)
+                self.log(f"❌ Could not find plug with UUID {self.cfg.config['uuid']}.", is_error=True)
             else:
                 self.log(f"🔌 Manual: {action} '{plug.name}'...")
                 if turn_on:
@@ -72,10 +72,10 @@ class BatteryBackend:
                 else:
                     await plug.async_turn_off()
                 await plug.async_update()
-                self.log(f"✅ {action} completado.")
+                self.log(f"✅ {action} completed.")
                 
         except Exception as e:
-            self.log(f"❌ Error de Control Manual: {e}", is_error=True)
+            self.log(f"❌ Manual Control Error: {e}", is_error=True)
         finally:
             try:
                 if 'manager' in locals(): manager.close()
@@ -83,7 +83,7 @@ class BatteryBackend:
             except: pass
 
     async def monitor_loop(self):
-        self.set_status("Conectando...", "orange")
+        self.set_status("Connecting...", "orange")
         http_api_client = None
         manager = None
         try:
@@ -97,20 +97,20 @@ class BatteryBackend:
             
             plug = next((p for p in manager.find_devices() if p.uuid == self.cfg.config["uuid"]), None)
             if not plug:
-                self.log(f"❌ No se encontró el enchufe con UUID {self.cfg.config['uuid']}.", is_error=True)
+                self.log(f"❌ Could not find plug with UUID {self.cfg.config['uuid']}.", is_error=True)
                 self.running = False
                 return
             
             await plug.async_update()
-            self.log(f"✅ Conectado y Enlazado a '{plug.name}'")
-            self.set_status(f"Monitorizando ({plug.name})", "#28a745")
+            self.log(f"✅ Connected and Bound to '{plug.name}'")
+            self.set_status(f"Monitoring ({plug.name})", "#28a745")
             
             self.last_status = None
             
             while self.running:
                 battery = psutil.sensors_battery()
                 if battery is None:
-                    self.log("❌ No se pudo leer la batería del sistema.", is_error=True)
+                    self.log("❌ Could not read system battery.", is_error=True)
                     break
                     
                 porcentaje = battery.percent
@@ -123,21 +123,21 @@ class BatteryBackend:
                 status = f"{bucket}-{cargando}-{enchufe_encendido}"
                 
                 if status != self.last_status:
-                    est = "Cargando" if cargando else "Descargando"
+                    est = "Charging" if cargando else "Discharging"
                     enc = "ON" if enchufe_encendido else "OFF"
-                    self.log(f"🔋 Batería: {porcentaje}% | {est} | Enchufe: {enc}")
+                    self.log(f"🔋 Battery: {porcentaje}% | {est} | Plug: {enc}")
                     self.last_status = status
                 
                 now = time.time()
                 if porcentaje <= self.cfg.config["min_bat"] and not cargando and not enchufe_encendido:
                     if now - self.last_action_ts > 60:
-                        self.log(f"⚡ Batería Baja ({porcentaje}%). Disparando ON.")
+                        self.log(f"⚡ Low Battery ({porcentaje}%). Triggering ON.")
                         await plug.async_turn_on()
                         await plug.async_update()
                         self.last_action_ts = now
                 elif porcentaje >= self.cfg.config["max_bat"] and cargando and enchufe_encendido:
                     if now - self.last_action_ts > 60:
-                        self.log(f"🛡 Batería Cargada ({porcentaje}%). Disparando OFF.")
+                        self.log(f"🛡 Battery Charged ({porcentaje}%). Triggering OFF.")
                         await plug.async_turn_off()
                         await plug.async_update()
                         self.last_action_ts = now

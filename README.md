@@ -1,4 +1,5 @@
 <div align="center">
+<img src="./logo.png" width="128" />
 
 # VoltGuard 🔋🔌
 
@@ -82,3 +83,30 @@ Every Meross IoT hub uniquely associates this Hardware and Cloud identifier. The
 
 - **🔌 Test Plug**: Pure gold tool. Press this and your Frontend will test the direct asynchrony with the Backend: your plug will attempt to turn on for _2 whole seconds_, and then turn off with a snap. From this, you will get two readings: network latency response, and know if you wrote the UUID correctly.
 - **Start Minimized Option**: Perfect for putting this application into the "*Run at Windows startup*" list of your daily routines. It launches loading the backend straight away, skipping the GUI flash.
+
+---
+
+## 📦 How to Build and Package a Release
+
+If you want to compile the project yourself into a fresh `.exe` and build a Windows installer, follow these steps:
+
+1. **Compile the Executable using PyInstaller**
+   You need the `pyinstaller` library installed. Run the following command in the project root:
+   ```bash
+   python -m PyInstaller --noconfirm VoltGuard.spec
+   ```
+   *This will generate a standalone `VoltGuard.exe` file inside the `dist/` directory, packaging the Python environment and the application's required assets via the `.spec` file.*
+
+2. **Generate the Windows Installer using Inno Setup**
+   You will need [Inno Setup 6](https://jrsoftware.org/isinfo.php) installed on your system.
+   - Open the file `VoltGuard.iss` with Inno Setup Compiler.
+   - Click the **Compile** button (or press `Ctrl+F9`).
+   - Alternatively, you can use the command line if Inno Setup is in your PATH. The default locations for `ISCC.exe` are usually:
+     ```powershell
+     & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" VoltGuard.iss
+     ```
+     *or if installed per-user:*
+     ```powershell
+     & "$env:LocalAppData\Programs\Inno Setup 6\ISCC.exe" VoltGuard.iss
+     ```
+   *This single action will pick up the executable from the `dist/` folder and generate the final `VoltGuard_Installer.exe` in the `Release/` folder, ready for distribution.*

@@ -12,8 +12,8 @@ class ConfigManager:
     def __init__(self):
         self.config = {
             "email": "",
-            "min_bat": 20,
-            "max_bat": 95,
+            "min_bat": 15,
+            "max_bat": 85,
             "check_time": 60,
             "uuid": "",
             "start_minimized": False
