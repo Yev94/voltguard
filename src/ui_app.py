@@ -135,7 +135,7 @@ class VoltGuardApp:
         self.root.after(0, self.root.destroy)
 
     # ================= UI & INPUT VALIDATION =================
-    def validate_inputs(self):
+    def validate_inputs(self, test_mode=False):
         try:
             current_saved_email = self.cfg_manager.config.get("email", "").strip()
             new_email = self.entry_email.get().strip()
@@ -165,7 +165,7 @@ class VoltGuardApp:
             if not (1 <= max_bat <= 100): raise ValueError("Maximum battery between 1 and 100.")
             if min_bat >= max_bat: raise ValueError("Minimum must be less than maximum.")
             if check_time < 5: raise ValueError("Check interval >= 5 seconds.")
-            if not uuid: raise ValueError("UUID required.")
+            if not test_mode and not uuid: raise ValueError("UUID required.")
             
             self.cfg_manager.config["email"] = new_email
             self.cfg_manager.config["min_bat"] = min_bat
@@ -388,7 +388,7 @@ class VoltGuardApp:
 
     def run_test_plug(self):
         if self.backend.running or self.testing_plug: return
-        is_valid, err = self.validate_inputs()
+        is_valid, err = self.validate_inputs(test_mode=True)
         if not is_valid:
             self.log(f"Validation error: {err}", is_error=True)
             return

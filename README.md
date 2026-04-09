@@ -76,8 +76,7 @@ python main.py
 4. The visual interface will ask on the first login for: **Your email, Password, and the famous Plug UUID**. Once filled in, configure the range fields: `% Min Battery`, `% Max Battery`, and the `Seconds` the engine waits before querying the variable again.
 
 ### Where do I find my Meross UUID?
-Every Meross IoT hub uniquely associates this Hardware and Cloud identifier. The rustic way to find it is using an async test script, but just starting the app and looking at the top blind log sequence will be enough.
-*The log itself will record on the fly and extract for us each unique ID for every internet plug at home if the console fails.*
+Just leave the UUID field blank, input your Meross Email and Password, and click the **🔌 Test Plug** button. The application will log into your Meross account and print a list of all your linked devices alongside their corresponding UUIDs directly in the Activity Log. From there, you can easily copy and paste yours.
 
 ### Special Active Buttons:
 
