@@ -18,6 +18,7 @@ class BatteryBackend:
         self.armed_for_off = True
         self.retry_count_on = 0
         self.retry_count_off = 0
+        self.was_ac_connected = None
         
     async def _connect_meross(self, require_uuid=True):
         http_client = await MerossHttpClient.async_from_user_password(
@@ -62,11 +63,11 @@ class BatteryBackend:
                 else:
                     self.log(f"📡 Testing '{plug.name}': Turning ON...")
                     await plug.async_turn_on()
-                    await plug.async_update()
+                    await self._refresh_plug_state(plug)
                     await asyncio.sleep(2)
                     self.log(f"📡 Testing '{plug.name}': Turning OFF...")
                     await plug.async_turn_off()
-                    await plug.async_update()
+                    await self._refresh_plug_state(plug)
                     self.log("✅ Test Finished OK")
         except Exception as e:
             self.log(f"❌ Hardware Test Error: {e}", is_error=True)
@@ -106,6 +107,7 @@ class BatteryBackend:
         self.retry_count_on = 0
         self.retry_count_off = 0
         self.last_status = None
+        self.was_ac_connected = None
         last_log_time = 0
         
         http_api_client = None
@@ -130,6 +132,13 @@ class BatteryBackend:
                         
                     porcentaje = battery.percent
                     enchufado_a_corriente = battery.power_plugged
+                    
+                    if self.was_ac_connected is not None and self.was_ac_connected != enchufado_a_corriente:
+                        estado_str = "lost" if not enchufado_a_corriente else "detected"
+                        self.log(f"🔌 AC Power {estado_str}. Verifying real plug state...")
+                        self.last_confirmed_command = "on" if await self._refresh_plug_state(plug) else "off"
+                        
+                    self.was_ac_connected = enchufado_a_corriente
                     
                     bucket = porcentaje // 5
                     enc_pasivo = self.last_confirmed_command if self.last_confirmed_command else "?" 
@@ -206,6 +215,9 @@ class BatteryBackend:
                 for _ in range(self.cfg.config.get("check_time", 60)):
                     if not self.running: break
                     await asyncio.sleep(1)
+            
+            # Normal Exit
+            self.set_status("Stopped", "gray")
 
         except Exception as e:
             self.log(f"❌ Fatal monitor error: {e}", is_error=True)
