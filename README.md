@@ -3,7 +3,7 @@
 
 # VoltGuard 🔋🔌
 
-Automatic laptop charge control · Windows + Linux · v1.1.0
+Automatic laptop charge control · Windows + Linux · v1.1.1
 
 ![VoltGuard UI](./image.png)
 </div>
@@ -14,17 +14,17 @@ The default policy is **ON at or below 40% while disconnected from AC**, and **O
 
 ## Install or update
 
-Download the distributions from [GitHub Releases](https://github.com/Yev94/voltguard/releases). CI artifacts are available on the [Actions page](https://github.com/Yev94/voltguard/actions) for branch builds. The old `Release/VoltGuard_Installer.exe` retained in the repository is **v1.0.0 for Windows**, not the new cross-platform installer.
+Download the distributions from [GitHub Releases](https://github.com/Yev94/voltguard/releases). CI artifacts are available on the [Actions page](https://github.com/Yev94/voltguard/actions) for branch builds. The old `Release/VoltGuard_Installer.exe` retained in the repository is **v1.0.0 for Windows**, not the current cross-platform installer.
 
 ### Windows
 
-Run `VoltGuard_1.1.0_Windows_Setup.exe`. The installer offers login startup, enabled by default. It registers the installed application under the current user's `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with `--autostart`. No administrator access or Windows service is required. The panel opens visibly when that user signs in.
+Run `VoltGuard_1.1.1_Windows_Setup.exe`. The installer offers login startup, enabled by default. It registers the installed application under the current user's `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with `--autostart`. No administrator access or Windows service is required. The panel opens visibly when that user signs in.
 
 The existing `%APPDATA%\VoltGuard\config.json` location is retained. The first v1.1 load migrates old 15–85 or 20–95 limits to **40–95**, shows the panel and requires the charging plug to be verified again. The password stays in Windows Credential Locker. Normal subsequent settings edits are preserved.
 
 ### Linux (including KDE Plasma / Wayland)
 
-Extract `VoltGuard-1.1.0-Linux.tar.gz`. On Ubuntu/Kubuntu install desktop dependencies if missing:
+Extract `VoltGuard-1.1.1-Linux.tar.gz`. On Ubuntu/Kubuntu install desktop dependencies if missing:
 
 ```bash
 sudo apt install python3-venv python3-tk python3-gi gir1.2-ayatanaappindicator3-0.1
@@ -64,6 +64,8 @@ This imports the account/UUID, stores its password in the OS keyring, applies 40
 
 Logs avoid passwords, tokens and device UUIDs. A failed network connection retries with backoff; stopping or losing connectivity does not send a compensating ON/OFF command. The laptop must be awake, signed in and connected to the Internet for charge control to operate.
 
+Displayed battery percentages are rounded to whole numbers (for example, `92 %`) in both the status and activity log. Charge decisions continue using the original precise reading. The panel opens once at login; monitoring refreshes do not show, raise or focus it. After hiding it, use the tray **Open** action to restore it.
+
 ## Development and validation
 
 ```bash
@@ -73,6 +75,8 @@ python main.py --demo          # harmless GUI preview; no account or switching
 python main.py --smoke-test    # render preview and exit
 python main.py                # normal application
 ```
+
+When adding a battery display, use `src.presentation.battery_percentage`; never round the value passed to the charge policy. Preserve the virtualenv interpreter path in launchers instead of resolving its symlink.
 
 On headless Linux, use `PYSTRAY_BACKEND=dummy xvfb-run -a python main.py --smoke-test`. The manual `test_meross.py` diagnostic is also read-only; it never selects a device by position.
 
