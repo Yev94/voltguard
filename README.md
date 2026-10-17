@@ -3,109 +3,85 @@
 
 # VoltGuard 🔋🔌
 
-[![Download Release v1.0.0](https://img.shields.io/badge/Download-v1.0.0-blue?style=for-the-badge&logo=windows)](https://github.com/Yev94/voltguard/releases/tag/v1.0.0)
+Automatic laptop charge control · Windows + Linux · v1.1.0
 
-![VoltGuard UI Preview](./image.png)
-
+![VoltGuard UI](./image.png)
 </div>
 
-A native resident, asynchronous, and modular Windows application designed to **monitor laptop battery**, and automatically turn on/off a **Meross** smart plug based on configurable energy thresholds. Built from scratch prioritizing stability, persistent local connection, and low resource consumption (Daemon).
+VoltGuard uses one Python codebase to read the laptop battery with `psutil` and control the **exact configured Meross smart plug**, through the Meross EU cloud. Internet and a supported single-outlet Meross plug are required. It does not change firmware or OS power profiles.
 
-## 🚀 Key Features
+The default policy is **ON at or below 40% while disconnected from AC**, and **OFF at or above 95% while connected to AC**, checked every 60 seconds. In between, it leaves the relay alone. Missing battery readings, unknown AC status, offline devices and unknown relay state never trigger a power command. Commands are acknowledged, rate limited and retried at most three times per threshold crossing. Only one controller can run per user.
 
-*   **MVC Architecture & Asynchrony:** The core (Backend) handles asynchronous read requests (`meross-iot` and `psutil`) completely decoupled from the visual interface (`customtkinter`).
-*   **Resident Mode (System Tray):** The application is designed to run in the background (Daemon). When pressing the close button, it silently hides next to the Windows clock (`pystray`) and continues operating unattended.
-*   **Cryptographic Vault:** Uses the native Windows credential manager (`keyring` Module). Your actual Meross account password is never saved in local files, protecting and isolating your credentials from plaintext attacks.
-*   **Extreme Resilience & Anti-spam:** If there's a Wi-Fi outage, the app gracefully suspends execution and uses a mathematical rotation function to avoid spamming the hard drive during false network spikes.
-*   **Absolute File Agnostic:** Preserves its own fixed save context in the reserved system folder to avoid collisions between packaged executables. Everything lives peacefully on your local system under a unified structure natively protected by Windows.
+## Install or update
 
----
+Download the distributions from [GitHub Releases](https://github.com/Yev94/voltguard/releases). CI artifacts are available on the [Actions page](https://github.com/Yev94/voltguard/actions) for branch builds. The old `Release/VoltGuard_Installer.exe` retained in the repository is **v1.0.0 for Windows**, not the new cross-platform installer.
 
-## 💻 Requirements
+### Windows
 
-To run this without executing a precompiled `.exe`, make sure you have the active libraries in your environment:
+Run `VoltGuard_1.1.0_Windows_Setup.exe`. The installer offers login startup, enabled by default. It registers the installed application under the current user's `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with `--autostart`. No administrator access or Windows service is required. The panel opens visibly when that user signs in.
 
-```bash
-pip install meross-iot psutil customtkinter pystray keyring pillow python-dotenv
-```
+The existing `%APPDATA%\VoltGuard\config.json` location is retained. The first v1.1 load migrates old 15–85 or 20–95 limits to **40–95**, shows the panel and requires the charging plug to be verified again. The password stays in Windows Credential Locker. Normal subsequent settings edits are preserved.
 
-> **OS Warning:** The telemetry logic is exclusively compiled drawing from the `psutil.sensors_battery()` engine.
+### Linux (including KDE Plasma / Wayland)
 
----
-
-## 📂 File Architecture
-
-This project applies separation of concerns for easier maintenance:
-
-```text
-📁 Project Root
-├── 📄 main.py (Main entry point of the application)
-│
-└── 📁 src\
-    ├── 📄 __init__.py 
-    ├── 📄 logger_config.py (Atomic UTF-8 disk logging system)
-    ├── 📄 config_manager.py (Model manager and Keyring Vault validation)
-    ├── 📄 battery_backend.py (Background thread backend and Meross logic)
-    └── 📄 ui_app.py (CustomTkinter block frontend and async callbacks)
-```
-
-### Persistent Paths
-Unless modified, the static core of the program will always reside in:
-> `C:\Users\YOUR_USER\AppData\Roaming\VoltGuard`
-
-- `config.json`: Stores exclusively the Email, the Plug's UUID, and the statistical flat-time checking thresholds.
-- `voltguard.log`: Limited log with auto-deletion (Log rotation at ~1MB max size with 3 time slots on disk) for deep debugging if the visual UI fails.
-
----
-
-## 🛠 Installation and Usage
-
-**Quick Install (Recommended):**
-Download the precompiled installer from the releases page:
-[👉 Download VoltGuard v1.0.0 Installer](https://github.com/Yev94/voltguard/releases/tag/v1.0.0)
-
-**Run from source:**
-1. Go to the project root.
-2. Open a terminal.
-3. Start it:
+Extract `VoltGuard-1.1.0-Linux.tar.gz`. On Ubuntu/Kubuntu install desktop dependencies if missing:
 
 ```bash
-python main.py
+sudo apt install python3-venv python3-tk python3-gi gir1.2-ayatanaappindicator3-0.1
+bash scripts/install-linux.sh
 ```
 
-4. The visual interface will ask on the first login for: **Your email, Password, and the famous Plug UUID**. Once filled in, configure the range fields: `% Min Battery`, `% Max Battery`, and the `Seconds` the engine waits before querying the variable again.
+The installer copies only application code/assets into `${XDG_DATA_HOME:-~/.local/share}/voltguard/app` and installs dependencies in a sibling virtual environment using system Python. This location is stable and independent of the source checkout/worktree. No existing configuration, profile or installation is purged. Re-run the installer to update.
 
-### Where do I find my Meross UUID?
-Just leave the UUID field blank, input your Meross Email and Password, and click the **🔌 Test Plug** button. The application will log into your Meross account and print a list of all your linked devices alongside their corresponding UUIDs directly in the Activity Log. From there, you can easily copy and paste yours.
+Open **VoltGuard** from the application menu. Per-user login startup is registered at `${XDG_CONFIG_HOME:-~/.config}/autostart/voltguard.desktop`. It opens the same visible panel; no background service or second implementation is created. The tray uses AppIndicator/Ayatana on Linux. If a usable tray cannot be created, the panel stays visible.
 
-### Special Active Buttons:
+Passwords use the secure desktop keyring (KWallet / Secret Service); unlock the wallet privately if prompted. VoltGuard will not save a password into JSON or fall back to an insecure plaintext backend.
 
-- **🔌 Test Plug**: Pure gold tool. Press this and your Frontend will test the direct asynchrony with the Backend: your plug will attempt to turn on for _2 whole seconds_, and then turn off with a snap. From this, you will get two readings: network latency response, and know if you wrote the UUID correctly.
-- **Start Minimized Option**: Perfect for putting this application into the "*Run at Windows startup*" list of your daily routines. It launches loading the backend straight away, skipping the GUI flash.
+## Configure and verify the charging plug
 
----
+1. Enter your Meross email, password and the exact UUID of the plug powering this laptop. Password input is masked. Do not paste credentials into logs, issues or chat.
+2. Keep the 40% / 95% limits or choose a valid range. **Save settings** stores the password in the OS keyring and the other settings in the user config file.
+3. **Verify Plug** checks only the configured UUID and reads its model/status. It does **not** turn it on or off. Confirm in the local dialog that this is the laptop charger before enabling control. Changing email or UUID invalidates that confirmation.
+4. **START** begins monitoring. **STOP** stops monitoring without changing the current relay state. Manual ON/OFF buttons remain available after verification.
 
-## 📦 How to Build and Package a Release
+The controls **Start charge monitoring automatically**, **Open panel at Windows / Linux login**, and **Hide window when opened manually** are independent. Login startup always opens the panel visibly. Closing the window hides it to the tray where supported; use **Exit** to stop the application.
 
-If you want to compile the project yourself into a fresh `.exe` and build a Windows installer, follow these steps:
+A password inherited from a legacy plaintext project config may be migrated locally, without printing it:
 
-1. **Compile the Executable using PyInstaller**
-   You need the `pyinstaller` library installed. Run the following command in the project root:
-   ```bash
-   python -m PyInstaller --noconfirm VoltGuard.spec
-   ```
-   *This will generate a standalone `VoltGuard.exe` file inside the `dist/` directory, packaging the Python environment and the application's required assets via the `.spec` file.*
+```bash
+/path/to/voltguard/venv/bin/python /path/to/voltguard/app/main.py --import-legacy /path/to/old/config.json
+```
 
-2. **Generate the Windows Installer using Inno Setup**
-   You will need [Inno Setup 6](https://jrsoftware.org/isinfo.php) installed on your system.
-   - Open the file `VoltGuard.iss` with Inno Setup Compiler.
-   - Click the **Compile** button (or press `Ctrl+F9`).
-   - Alternatively, you can use the command line if Inno Setup is in your PATH. The default locations for `ISCC.exe` are usually:
-     ```powershell
-     & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" VoltGuard.iss
-     ```
-     *or if installed per-user:*
-     ```powershell
-     & "$env:LocalAppData\Programs\Inno Setup 6\ISCC.exe" VoltGuard.iss
-     ```
-   *This single action will pick up the executable from the `dist/` folder and generate the final `VoltGuard_Installer.exe` in the `Release/` folder, ready for distribution.*
+This imports the account/UUID, stores its password in the OS keyring, applies 40–95 and leaves hardware control unconfirmed. The original file remains untouched. Credentials are not synchronized between Windows and Linux; each OS uses its own secure wallet.
+
+### User files
+
+| File | Windows | Linux |
+| --- | --- | --- |
+| Non-secret settings | `%APPDATA%\VoltGuard\config.json` | `${XDG_CONFIG_HOME:-~/.config}/voltguard/config.json` |
+| Rotating logs | `%APPDATA%\VoltGuard\voltguard.log` | `${XDG_STATE_HOME:-~/.local/state}/voltguard/voltguard.log` |
+| Instance lock | Settings directory | Settings directory |
+
+Logs avoid passwords, tokens and device UUIDs. A failed network connection retries with backoff; stopping or losing connectivity does not send a compensating ON/OFF command. The laptop must be awake, signed in and connected to the Internet for charge control to operate.
+
+## Development and validation
+
+```bash
+python -m pip install -r requirements.txt
+python -m unittest discover -s tests -v
+python main.py --demo          # harmless GUI preview; no account or switching
+python main.py --smoke-test    # render preview and exit
+python main.py                # normal application
+```
+
+On headless Linux, use `PYSTRAY_BACKEND=dummy xvfb-run -a python main.py --smoke-test`. The manual `test_meross.py` diagnostic is also read-only; it never selects a device by position.
+
+GitHub Actions runs mocked battery/network tests and GUI smoke tests on **Windows and Ubuntu**. Windows CI also checks the native startup registry entry, builds with PyInstaller + Inno Setup and smoke-tests the packaged executable. Linux CI packages the shared source and native installer script. Version tags publish both distributions only after the jobs succeed. CI does not authenticate to a real Meross account or switch hardware. A physical Windows login and the next real Linux login remain separate operational checks.
+
+To build Windows locally:
+
+```powershell
+python -m pip install -r requirements.txt 'pyinstaller>=6.16,<7'
+python -m PyInstaller --noconfirm VoltGuard.spec
+& 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' VoltGuard.iss
+```

@@ -11,3 +11,11 @@ dist/
 
 # Inno Setup output
 Release/
+# Local credentials, virtual environments and generated releases
+.env
+.env.*
+.venv/
+venv/
+*.log
+*.lock
+artifacts/

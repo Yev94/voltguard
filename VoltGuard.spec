@@ -1,12 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
+
+extra_data = collect_data_files("customtkinter") + copy_metadata("meross-iot")
+extra_imports = collect_submodules("keyring.backends")
+
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('logo.png', '.'), ('logo.ico', '.')],
-    hiddenimports=[],
+    datas=[('logo.png', '.'), ('logo.ico', '.')] + extra_data,
+    hiddenimports=extra_imports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
