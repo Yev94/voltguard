@@ -4,6 +4,11 @@ import threading
 import time
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageTk
+from tkinter import messagebox
+import queue
+import sys
+from src.autostart import configure_autostart
+from src.paths import resource_dir
 import customtkinter as ctk
 import pystray
 
@@ -40,27 +45,30 @@ CHK_COLOR    = "#2DB87A"
 CHK_HOVER    = "#249960"
 
 class VoltGuardApp:
-    def __init__(self, root):
+    def __init__(self, root, *, demo=False, login_start=False):
         self.root = root
+        self.demo = demo
+        self.ui_queue = queue.Queue()
+        self.closing = False
+        self.root.after(50, self._drain_ui_queue)
         self.root.title("VoltGuard")
-        self.root.geometry("500x900+500+100")
-        self.root.resizable(False, False)
+        self.root.geometry(f"500x{min(960, max(500, self.root.winfo_screenheight() - 120))}")
+        self.root.resizable(False, True)
 
-        import sys
-        try:
-            base_dir = sys._MEIPASS
-        except AttributeError:
-            base_dir = os.path.dirname(os.path.dirname(__file__))
+        base_dir = resource_dir()
         
         self._ico_path = os.path.join(base_dir, "logo.ico")
         self._logo_path = os.path.join(base_dir, "logo.png")
-        if os.path.exists(self._ico_path):
-            self.root.after(100, lambda: self.root.iconbitmap(self._ico_path))
+        if sys.platform == "win32" and os.path.exists(self._ico_path):
+            self.root.iconbitmap(self._ico_path)
+        elif os.path.exists(self._logo_path):
+            self._tk_icon = ImageTk.PhotoImage(Image.open(self._logo_path))
+            self.root.iconphoto(True, self._tk_icon)
 
         ctk.set_appearance_mode("Dark")
         ctk.set_default_color_theme("blue")
         
-        self.cfg_manager = ConfigManager()
+        self.cfg_manager = ConfigManager(demo=demo)
         self.backend = BatteryBackend(self.cfg_manager, self.log, self.set_status)
         
         self.testing_plug = False
@@ -71,9 +79,57 @@ class VoltGuardApp:
         self.build_ui()
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
         
-        if self.cfg_manager.config.get("start_minimized"):
-            self.root.after(300, self.hide_window)
-            self.root.after(500, self.start_monitor)
+        if demo:
+            self.set_status("Preview · 40–95% · no hardware control", "#17B8C8")
+            for widget in (self.btn_start, self.btn_on, self.btn_off, self.btn_test,
+                           self.btn_save, self.chk_login, self.chk_auto, self.chk_minimized):
+                widget.configure(state="disabled")
+            self.log("Preview only. No account is connected and no plug will be switched.")
+        else:
+            if self.cfg_manager.storage_error:
+                self.log("Secure settings are unavailable; configure the panel before starting.", is_error=True)
+            if self.cfg_manager.config.get("start_minimized") and not login_start:
+                self.root.after(300, self.hide_window)
+            if self.cfg_manager.config.get("auto_monitor"):
+                self.root.after(800, self._auto_start)
+
+    def post_ui(self, callback, *args):
+        self.ui_queue.put((callback, args))
+
+    def _drain_ui_queue(self):
+        if self.closing:
+            return
+        try:
+            while True:
+                callback, args = self.ui_queue.get_nowait()
+                callback(*args)
+                if self.closing:
+                    return
+        except queue.Empty:
+            pass
+        self.root.after(50, self._drain_ui_queue)
+
+    def _auto_start(self):
+        if self.cfg_manager.is_confirmed() and self.cfg_manager.password:
+            self.start_monitor()
+        else:
+            self.set_status("Verify the charging plug to enable monitoring", "orange")
+
+    def save_settings(self):
+        valid, error = self.validate_inputs(test_mode=True)
+        if not valid:
+            self.log(error, is_error=True)
+            return False
+        if not self.cfg_manager.raw_save():
+            self.log("Could not save: unlock or configure the system credential wallet.", is_error=True)
+            return False
+        try:
+            configure_autostart(bool(self.chk_login.get()))
+        except Exception as error:
+            self.log(f"Could not update login startup ({type(error).__name__}).", is_error=True)
+            return False
+        self.log("Settings saved. Login startup opens this panel visibly.")
+        return True
 
     # ================= LOGS & STATUS UI =================
     def log(self, msg, is_error=False, is_spam=False):
@@ -82,7 +138,7 @@ class VoltGuardApp:
                 logger.error(msg)
             else:
                 logger.info(msg)
-        self.root.after(0, self._update_log_area, msg)
+        self.post_ui(self._update_log_area, msg)
 
     def _update_log_area(self, msg):
         hora = datetime.now().strftime("%H:%M:%S")
@@ -92,7 +148,7 @@ class VoltGuardApp:
         self.log_area.configure(state="disabled")
 
     def set_status(self, text, color="white"):
-        self.root.after(0, lambda: self.status_label.configure(text=text, text_color=color))
+        self.post_ui(lambda: self.status_label.configure(text=text, text_color=color))
 
     # ================= PYSTRAY (WINDOW MGMT) =================
     def _crear_icono_tray(self):
@@ -111,10 +167,19 @@ class VoltGuardApp:
             )
             self.tray_icon = pystray.Icon("VoltGuard", self._crear_icono_tray(), "VoltGuard", menu)
             self.tray_icon.run()
+        except Exception as error:
+            self.log(f"Tray unavailable ({type(error).__name__}); keeping the panel visible.", is_error=True)
+            self.post_ui(self.root.deiconify)
         finally:
             self.tray_starting = False
 
     def hide_window(self, icon=None, item=None):
+        if self.demo:
+            self.quit_window()
+            return
+        if not pystray.Icon.HAS_MENU:
+            self.log("Tray menu unavailable; keeping the panel visible.")
+            return
         self.root.withdraw()
         if not self.tray_icon and not self.tray_starting:
             self.tray_starting = True
@@ -124,7 +189,7 @@ class VoltGuardApp:
         if self.tray_icon:
             self.tray_icon.stop()
             self.tray_icon = None
-        self.root.after(0, self.root.deiconify)
+        self.post_ui(self.root.deiconify)
 
     def quit_window(self, icon=None, item=None):
         self.backend.running = False
@@ -132,7 +197,11 @@ class VoltGuardApp:
         if self.tray_icon:
             self.tray_icon.stop()
             self.tray_icon = None
-        self.root.after(0, self.root.destroy)
+        self.post_ui(self._destroy_window)
+
+    def _destroy_window(self):
+        self.closing = True
+        self.root.destroy()
 
     # ================= UI & INPUT VALIDATION =================
     def validate_inputs(self, test_mode=False):
@@ -167,12 +236,16 @@ class VoltGuardApp:
             if check_time < 5: raise ValueError("Check interval >= 5 seconds.")
             if not test_mode and not uuid: raise ValueError("UUID required.")
             
+            if new_email != current_saved_email or uuid != self.cfg_manager.config.get("uuid", ""):
+                self.cfg_manager.config["confirmed_uuid"] = ""
             self.cfg_manager.config["email"] = new_email
             self.cfg_manager.config["min_bat"] = min_bat
             self.cfg_manager.config["max_bat"] = max_bat
             self.cfg_manager.config["check_time"] = check_time
             self.cfg_manager.config["uuid"] = uuid
             self.cfg_manager.config["start_minimized"] = bool(self.chk_minimized.get())
+            self.cfg_manager.config["auto_monitor"] = bool(self.chk_auto.get())
+            self.cfg_manager.config["start_at_login"] = bool(self.chk_login.get())
                 
             return True, ""
         except ValueError as e:
@@ -183,7 +256,7 @@ class VoltGuardApp:
                      text_color="#8888AA").pack(anchor="w", padx=12, pady=(10, 2))
 
     def build_ui(self):
-        main_frame = ctk.CTkFrame(self.root, fg_color="transparent")
+        main_frame = ctk.CTkScrollableFrame(self.root, fg_color="transparent")
         main_frame.pack(fill=ctk.BOTH, expand=True, padx=18, pady=10)
 
         # ── Header: logo + title ──────────────────────────────────────────────
@@ -248,7 +321,7 @@ class VoltGuardApp:
         ctk.CTkLabel(grid_frame, text="Minimum battery (%):", **lbl_style).grid(row=0, column=0, sticky="w", pady=4)
         self.entry_min = ctk.CTkEntry(grid_frame, **entry_style)
         self.entry_min.grid(row=0, column=1, sticky="e", pady=4)
-        self.entry_min.insert(0, str(self.cfg_manager.config.get("min_bat", 20)))
+        self.entry_min.insert(0, str(self.cfg_manager.config.get("min_bat", 40)))
 
         ctk.CTkLabel(grid_frame, text="Maximum battery (%):", **lbl_style).grid(row=1, column=0, sticky="w", pady=4)
         self.entry_max = ctk.CTkEntry(grid_frame, **entry_style)
@@ -266,12 +339,28 @@ class VoltGuardApp:
             entry.bind("<FocusIn>", lambda e, w=entry: w.configure(border_color=INPUT_FOCUS))
             entry.bind("<FocusOut>", lambda e, w=entry: w.configure(border_color=INPUT_BORDER))
 
-        self.chk_minimized = ctk.CTkCheckBox(frame_param, text="Start minimized and auto-start monitor",
+        self.chk_minimized = ctk.CTkCheckBox(frame_param, text="Hide window when opened manually",
                                               font=("Roboto", 12), checkbox_width=18, checkbox_height=18,
                                               fg_color=CHK_COLOR, hover_color=CHK_HOVER)
-        self.chk_minimized.pack(anchor="w", padx=12, pady=(4, 12))
+        self.chk_minimized.pack(anchor="w", padx=12, pady=(4, 4))
         if self.cfg_manager.config.get("start_minimized"):
             self.chk_minimized.select()
+
+        self.chk_auto = ctk.CTkCheckBox(frame_param, text="Start charge monitoring automatically",
+                                        font=("Roboto", 12), checkbox_width=18, checkbox_height=18,
+                                        fg_color=CHK_COLOR, hover_color=CHK_HOVER)
+        self.chk_auto.pack(anchor="w", padx=12, pady=4)
+        if self.cfg_manager.config.get("auto_monitor"):
+            self.chk_auto.select()
+        self.chk_login = ctk.CTkCheckBox(frame_param, text="Open panel at Windows / Linux login",
+                                         font=("Roboto", 12), checkbox_width=18, checkbox_height=18,
+                                         fg_color=CHK_COLOR, hover_color=CHK_HOVER)
+        self.chk_login.pack(anchor="w", padx=12, pady=(4, 8))
+        if self.cfg_manager.config.get("start_at_login"):
+            self.chk_login.select()
+        self.btn_save = ctk.CTkButton(frame_param, text="Save settings", command=self.save_settings,
+                                      fg_color=GRAY_BTN, hover_color=GRAY_HOVER, height=28)
+        self.btn_save.pack(fill=ctk.X, padx=12, pady=(0, 8))
 
         # ── Action buttons ────────────────────────────────────────────────────
         frame_btns = ctk.CTkFrame(main_frame, fg_color="transparent")
@@ -305,7 +394,7 @@ class VoltGuardApp:
         frame_utils = ctk.CTkFrame(main_frame, fg_color="transparent")
         frame_utils.pack(fill=ctk.X, pady=(0, 6))
 
-        self.btn_test = ctk.CTkButton(frame_utils, text="🔌  Test Plug", command=self.run_test_plug,
+        self.btn_test = ctk.CTkButton(frame_utils, text="🔌  Verify Plug", command=self.run_test_plug,
                                       fg_color=TEAL, hover_color=TEAL_HOVER,
                                       text_color="white",
                                       font=("Roboto", 12), height=36, corner_radius=10)
@@ -340,6 +429,9 @@ class VoltGuardApp:
         self.entry_max.configure(state=state)
         self.entry_time.configure(state=state)
         self.chk_minimized.configure(state=state)
+        self.chk_auto.configure(state=state)
+        self.chk_login.configure(state=state)
+        self.btn_save.configure(state=state)
 
         if is_running:
             self.btn_start.configure(fg_color=GREEN_OFF, hover_color=GREEN_OFF,
@@ -366,13 +458,17 @@ class VoltGuardApp:
 
     # ================= LOGICA DE ARRANQUE =================
     def start_monitor(self):
-        if self.backend.running: return
+        if self.demo or self.backend.running: return
         is_valid, err = self.validate_inputs()
         if not is_valid:
             self.log(f"Validation error: {err}", is_error=True)
             return
-        if not self.cfg_manager.raw_save(): return
-        
+        if not self.cfg_manager.is_confirmed():
+            self.log("Verify and confirm the laptop charging plug before starting.", is_error=True)
+            return
+        if not self.cfg_manager.raw_save():
+            self.log("Secure credential storage unavailable; monitoring was not started.", is_error=True)
+            return
         self.backend.running = True
         self.set_gui_state(True)
         self.set_status("Starting connectivity...", "#17a2b8")
@@ -387,7 +483,7 @@ class VoltGuardApp:
         self.set_status("Stopping...", "orange")
 
     def run_test_plug(self):
-        if self.backend.running or self.testing_plug: return
+        if self.demo or self.backend.running or self.testing_plug: return
         is_valid, err = self.validate_inputs(test_mode=True)
         if not is_valid:
             self.log(f"Validation error: {err}", is_error=True)
@@ -396,7 +492,7 @@ class VoltGuardApp:
         
         self.testing_plug = True
         self.set_gui_state(True)
-        self.log("Starting Hardware Test Sequence...")
+        self.log("Checking the configured plug without switching it…")
         threading.Thread(target=self._test_wrapper, daemon=True).start()
 
     def manual_turn_on(self):
@@ -406,7 +502,10 @@ class VoltGuardApp:
         self._manual_action(False)
 
     def _manual_action(self, turn_on):
-        if self.backend.running or self.testing_plug: return
+        if not self.cfg_manager.is_confirmed():
+            self.log("Verify and confirm the laptop charging plug first.", is_error=True)
+            return
+        if self.demo or self.backend.running or self.testing_plug: return
         is_valid, err = self.validate_inputs()
         if not is_valid:
             self.log(f"Validation error: {err}", is_error=True)
@@ -422,7 +521,8 @@ class VoltGuardApp:
     # ================= WRAPPERS ASYNCIO =================
     def _run_async_wrapper(self):
         if os.name == 'nt':
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            if hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
+                asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
@@ -432,7 +532,7 @@ class VoltGuardApp:
                     loop.run_until_complete(self.backend.monitor_loop())
                 except Exception as e:
                     if not self.backend.running: break
-                    self.log(f"Critical network/Meross failure: {e}. Retrying in 30s.", is_error=True)
+                    self.log(f"Monitor unavailable ({type(e).__name__}). Retrying in 30s.", is_error=True)
                     self.set_status("Reconnecting (Network Error)", "red")
                     
                     for _ in range(30):
@@ -440,26 +540,30 @@ class VoltGuardApp:
                         time.sleep(1)
         finally:
             loop.close()
-            self.root.after(0, self.set_gui_state, False)
-            self.root.after(0, self.set_status, "Stopped", "gray")
+            self.post_ui(self.set_gui_state, False)
+            self.post_ui(self.set_status, "Stopped", "gray")
             self.log("---- Monitor stopped gracefully ----")
 
     def _test_wrapper(self):
-        if os.name == 'nt':
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        info = None
         try:
-            loop.run_until_complete(self.backend.async_test_plug())
+            info = asyncio.run(self.backend.inspect_plug())
+        except Exception as error:
+            self.log(f"Plug verification failed ({type(error).__name__}). Check the account credentials.", is_error=True)
         finally:
-            loop.close()
             self.testing_plug = False
-            self.root.after(0, self.set_gui_state, False)
-            self.root.after(0, self.set_status, "Stopped", "gray")
+            self.post_ui(self._finish_verification, info)
+
+    def _finish_verification(self, info):
+        self.set_gui_state(False)
+        self.set_status("Stopped", "gray")
+        if info:
+            self._confirm_plug(info)
 
     def _manual_wrapper(self, turn_on):
         if os.name == 'nt':
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            if hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
+                asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -467,5 +571,18 @@ class VoltGuardApp:
         finally:
             loop.close()
             self.testing_plug = False
-            self.root.after(0, self.set_gui_state, False)
-            self.root.after(0, self.set_status, "Stopped", "gray")
+            self.post_ui(self.set_gui_state, False)
+            self.post_ui(self.set_status, "Stopped", "gray")
+
+    def _confirm_plug(self, info):
+        approved = self.cfg_manager.config.get("approved_uuid") == info["uuid"]
+        if approved or messagebox.askyesno("Confirm laptop charging plug",
+                               f"Found: {info['name']} ({info['type']}).\n"
+                               "Is this the plug powering THIS laptop charger?\n"
+                               "No power switching has been performed."):
+            self.cfg_manager.config.update(confirmed_uuid=info["uuid"], approved_uuid=info["uuid"],
+                                           device_name=info["name"], device_type=info["type"])
+            if self.cfg_manager.raw_save():
+                self.log("Charging plug verified. Ready for automatic monitoring.")
+                if self.cfg_manager.config.get("auto_monitor"):
+                    self.start_monitor()

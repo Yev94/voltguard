@@ -1,15 +1,15 @@
 [Setup]
 ; Información básica de la aplicación
 AppName=VoltGuard
-AppVersion=1.0.0
+AppVersion=1.1.0
 AppPublisher=Yev / VoltGuard
-AppSupportURL=https://github.com/tu-usuario/voltguard
+AppSupportURL=https://github.com/Yev94/voltguard
 
 ; Directorios y nombres de salida
 DefaultDirName={autopf}\VoltGuard
 DefaultGroupName=VoltGuard
 OutputDir=Release
-OutputBaseFilename=VoltGuard_Installer
+OutputBaseFilename=VoltGuard_1.1.0_Windows_Setup
 SetupIconFile=logo.ico
 
 ; Apariencia y permisos
@@ -37,7 +37,7 @@ Name: "{autodesktop}\VoltGuard"; Filename: "{app}\VoltGuard.exe"; IconFilename: 
 
 [Registry]
 ; Autoarranque - Este es el registry key mágico para arrancar con Windows
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "VoltGuard"; ValueData: """{app}\VoltGuard.exe"""; Tasks: startup
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "VoltGuard"; ValueData: """{app}\VoltGuard.exe"" --autostart"; Tasks: startup
 
 [Run]
 ; Lanzar la aplicación automáticamente tras finalizar la instalación
