@@ -64,6 +64,15 @@ class SettingsTests(unittest.TestCase):
 
 
 class StartupTests(unittest.TestCase):
+    @unittest.skipIf(sys.platform=='win32','Symlink regression applies to the Linux virtualenv launcher')
+    def test_login_preserves_virtualenv_interpreter_symlink(self):
+        with tempfile.TemporaryDirectory() as folder:
+            executable=Path(folder)/'venv/bin/python'
+            executable.parent.mkdir(parents=True)
+            executable.symlink_to(sys.executable)
+            with patch('sys.executable',str(executable)):
+                self.assertEqual(launch_command()[0],str(executable))
+
     def test_linux_native_autostart_and_path_quoting(self):
         entry=desktop_entry(['/home/example/My App/python','/home/example/50%/main.py'],startup=True)
         self.assertIn('"/home/example/My App/python"',entry)

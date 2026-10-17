@@ -59,6 +59,17 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
             await self.backend._poll_once(dev)
         dev.async_turn_on.assert_not_awaited()
 
+    async def test_integer_presentation_does_not_round_the_control_reading(self):
+        dev=plug(True)
+        reading=sample(94.63,True)
+        with patch('src.battery_backend.psutil.sensors_battery',return_value=reading):
+            await self.backend._poll_once(dev)
+        self.log.assert_called_once_with('Battery: 95 % | AC: True')
+        self.assertIn('Monitoring · 95 % ·',self.backend.set_status.call_args.args[0])
+        self.assertEqual(reading.percent,94.63)
+        dev.async_turn_off.assert_not_awaited()
+        dev.async_update.assert_not_awaited()
+
     async def test_readonly_discovery_binds_exact_uuid_and_cleans_up(self):
         selected=plug();other=plug();other.uuid='other'
         http=SimpleNamespace(async_logout=AsyncMock())
