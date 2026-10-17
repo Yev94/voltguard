@@ -6,7 +6,8 @@ from pathlib import Path
 
 
 def launch_command():
-    executable = Path(sys.executable).resolve()
+    # Preserve a virtualenv launcher symlink; resolving it loses its dependencies at login.
+    executable = Path(sys.executable).absolute()
     if getattr(sys, "frozen", False):
         return [str(executable)]
     if sys.platform == "win32" and executable.name.lower() == "python.exe":

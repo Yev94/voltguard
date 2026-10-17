@@ -8,6 +8,7 @@ from meross_iot.http_api import MerossHttpClient
 from meross_iot.manager import MerossManager
 from meross_iot.model.enums import OnlineStatus
 from src.charge_policy import desired_action
+from src.presentation import battery_percentage
 
 
 class BatteryBackend:
@@ -107,9 +108,9 @@ class BatteryBackend:
         if action is None:
             self._attempts = {"on": 0, "off": 0}
         if time.monotonic() - self._last_log_at >= 120:
-            self.log(f"Battery: {battery.percent}% | AC: {battery.power_plugged}")
+            self.log(f"Battery: {battery_percentage(battery.percent)} | AC: {battery.power_plugged}")
             self._last_log_at = time.monotonic()
-        self.set_status(f"Monitoring · {battery.percent}% · {self.cfg.config['min_bat']}–{self.cfg.config['max_bat']}%", "#2DB87A")
+        self.set_status(f"Monitoring · {battery_percentage(battery.percent)} · {self.cfg.config['min_bat']}–{self.cfg.config['max_bat']}%", "#2DB87A")
         if action is None or self._attempts[action] >= 3 or time.monotonic() - self._last_action_at < 30:
             return
         self._require_confirmation()
