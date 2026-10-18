@@ -1,7 +1,7 @@
 [Setup]
 ; Información básica de la aplicación
 AppName=VoltGuard
-AppVersion=1.1.1
+AppVersion=1.1.2
 AppPublisher=Yev / VoltGuard
 AppSupportURL=https://github.com/Yev94/voltguard
 
@@ -9,7 +9,7 @@ AppSupportURL=https://github.com/Yev94/voltguard
 DefaultDirName={autopf}\VoltGuard
 DefaultGroupName=VoltGuard
 OutputDir=Release
-OutputBaseFilename=VoltGuard_1.1.1_Windows_Setup
+OutputBaseFilename=VoltGuard_1.1.2_Windows_Setup
 SetupIconFile=logo.ico
 
 ; Apariencia y permisos

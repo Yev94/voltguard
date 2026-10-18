@@ -50,6 +50,8 @@ class VoltGuardApp:
         self.demo = demo
         self.ui_queue = queue.Queue()
         self.closing = False
+        self._auto_start_requested = False
+        self._credential_retry_delay = 2000
         self.root.after(50, self._drain_ui_queue)
         self.root.title("VoltGuard")
         self.root.geometry(f"500x{min(960, max(500, self.root.winfo_screenheight() - 120))}")
@@ -91,6 +93,7 @@ class VoltGuardApp:
             if self.cfg_manager.config.get("start_minimized") and not login_start:
                 self.root.after(300, self.hide_window)
             if self.cfg_manager.config.get("auto_monitor"):
+                self._auto_start_requested = True
                 self.root.after(800, self._auto_start)
 
     def post_ui(self, callback, *args):
@@ -110,10 +113,35 @@ class VoltGuardApp:
         self.root.after(50, self._drain_ui_queue)
 
     def _auto_start(self):
-        if self.cfg_manager.is_confirmed() and self.cfg_manager.password:
-            self.start_monitor()
-        else:
+        if self.closing or not self._auto_start_requested or self.backend.running:
+            return
+        if not self.cfg_manager.config.get("auto_monitor"):
+            self._auto_start_requested = False
+            return
+        if not self.cfg_manager.is_confirmed():
             self.set_status("Verify the charging plug to enable monitoring", "orange")
+            return
+        if not self.cfg_manager.password:
+            # Do not replace a password being edited or start a login behind the user's input.
+            if self.entry_password.get() not in ("", "********"):
+                self.set_status("Password edited; save and start when ready", "orange")
+                return
+            if not self.cfg_manager.reload_password():
+                state = self.cfg_manager.credential_state
+                if state == "missing":
+                    self.set_status("No saved password in the configured system wallet", "orange")
+                    return
+                if state not in {"wallet_not_ready", "wallet_locked", "wallet_unavailable"}:
+                    self.set_status("System wallet access unavailable; saved credentials are preserved", "orange")
+                    return
+                self.set_status("Waiting for the system wallet; saved credentials are preserved", "orange")
+                self.root.after(self._credential_retry_delay, self._auto_start)
+                self._credential_retry_delay = min(self._credential_retry_delay * 2, 30000)
+                return
+            self.entry_password.delete(0, "end")
+            self.entry_password.insert(0, "********")
+        self._auto_start_requested = False
+        self.start_monitor()
 
     def save_settings(self):
         valid, error = self.validate_inputs(test_mode=True)
@@ -220,7 +248,9 @@ class VoltGuardApp:
                 self.cfg_manager.password = ""
 
             if not pwd and not self.cfg_manager.password:
-                raise ValueError("Password required.")
+                self.cfg_manager.reload_password()
+                if not self.cfg_manager.password:
+                    raise ValueError("System wallet unavailable or no saved password; credentials have not been changed.")
 
             if pwd and pwd != "********":
                 self.cfg_manager.password = pwd
@@ -478,6 +508,7 @@ class VoltGuardApp:
         self.thread.start()
 
     def stop_monitor(self):
+        self._auto_start_requested = False
         self.log("Requesting safe stop...", is_spam=True)
         self.backend.running = False
         self.set_status("Stopping...", "orange")

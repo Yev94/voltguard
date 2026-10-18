@@ -4,8 +4,8 @@ source_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 install_root="${XDG_DATA_HOME:-$HOME/.local/share}/voltguard"
 app_dir="$install_root/app"
 python_bin="${VOLTGUARD_PYTHON:-/usr/bin/python3}"
-"$python_bin" -c 'import tkinter, gi; gi.require_version("AyatanaAppIndicator3", "0.1")' || {
-  echo 'Install python3-venv python3-tk python3-gi gir1.2-ayatanaappindicator3-0.1, then run this installer again.' >&2
+"$python_bin" -c 'import tkinter, gi, dbus; gi.require_version("AyatanaAppIndicator3", "0.1")' || {
+  echo 'Install python3-venv python3-tk python3-gi python3-dbus gir1.2-ayatanaappindicator3-0.1, then run this installer again.' >&2
   exit 1
 }
 mkdir -p "$app_dir/src"
