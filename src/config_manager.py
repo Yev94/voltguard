@@ -4,7 +4,7 @@ import os
 import tempfile
 from pathlib import Path
 
-import keyring
+from src.credential_store import CredentialStore, CredentialUnavailable
 
 from src.paths import config_dir
 from src.logger_config import get_logger
@@ -14,16 +14,19 @@ CONFIG_FILE = config_dir() / "config.json"
 DEFAULTS = {
     "schema_version": 2, "email": "", "uuid": "", "min_bat": 40, "max_bat": 95,
     "check_time": 60, "start_minimized": False, "auto_monitor": True,
-    "start_at_login": True, "confirmed_uuid": "", "approved_uuid": "", "device_name": "", "device_type": "",
+    "start_at_login": True, "confirmed_uuid": "", "approved_uuid": "", "device_name": "", "device_type": "", "credential_backend": "",
 }
 logger = get_logger()
 
 
 class ConfigManager:
-    def __init__(self, path=None, *, demo=False):
+    def __init__(self, path=None, *, demo=False, credential_store=None):
         self.path = Path(path) if path else CONFIG_FILE
         self.config = DEFAULTS.copy()
-        self.password = ""
+        self._password = ""
+        self._password_changed = False
+        self.credential_state = "empty"
+        self._credential_store = credential_store
         self.demo = demo
         self.storage_error = ""
         if not demo:
@@ -40,11 +43,38 @@ class ConfigManager:
             if data.get("schema_version", 1) < 2:
                 self.config.update(min_bat=40, max_bat=95, start_minimized=False,
                                    auto_monitor=True, confirmed_uuid="", schema_version=2)
-            if self.config.get("email"):
-                self.password = keyring.get_password(KEYRING_SERVICE, self.config["email"]) or ""
+            self.reload_password()
         except Exception as error:
             self.storage_error = type(error).__name__
             logger.warning("Settings/keyring unavailable (%s). Open the panel to configure.", self.storage_error)
+
+    @property
+    def password(self):
+        return self._password
+
+    @password.setter
+    def password(self, value):
+        self._password_changed = (self._password_changed or value != self._password) if value else False
+        self._password = value
+
+    def reload_password(self):
+        """Retry a delayed wallet without reloading settings or overwriting a user's edit."""
+        if self.demo or not self.config.get("email"):
+            return False
+        if self._password_changed or self._password:
+            return bool(self._password)
+        try:
+            if self._credential_store is None:
+                self._credential_store = CredentialStore(self.config.get("credential_backend", ""))
+            value = self._credential_store.read(self.config["email"])
+            self.credential_state = "ready" if value else "missing"
+            if value:
+                self._password = value
+                self.config["credential_backend"] = self._credential_store.backend_id
+            return bool(value)
+        except CredentialUnavailable as error:
+            self.credential_state = error.state
+            return False
 
     def import_legacy(self, path):
         """Explicit local migration. Never prints or copies passwords into settings."""
@@ -59,19 +89,13 @@ class ConfigManager:
             return True
         tmp_path = None
         try:
-            # Fail closed for missing/insecure backends. Do not fall back to plaintext.
-            from keyring.backend import KeyringBackend
-            backend = keyring.get_keyring()
-            choices = getattr(backend, "backends", [backend])
-            secure = next((candidate for candidate in choices
-                           if isinstance(candidate, KeyringBackend) and candidate.priority > 0
-                           and not type(candidate).__module__.startswith(("keyrings.alt", "keyring.backends.null"))), None)
-            if secure is None:
-                raise RuntimeError("Secure keyring unavailable")
-            if secure is not backend:
-                keyring.set_keyring(secure)
-            if self.config["email"] and self.password:
-                keyring.set_password(KEYRING_SERVICE, self.config["email"], self.password)
+            # Si solo se guardan ajustes -> conservar la credencial y su almacén sin reescribirla.
+            if self._password_changed:
+                if self._credential_store is None:
+                    self._credential_store = CredentialStore(self.config.get("credential_backend", ""))
+                self._credential_store.write(self.config["email"], self._password)
+                self.config["credential_backend"] = self._credential_store.backend_id
+                self._password_changed = False
             self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             safe = {k: self.config[k] for k in DEFAULTS}
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.path.parent,

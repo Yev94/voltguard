@@ -3,7 +3,7 @@
 
 # VoltGuard 🔋🔌
 
-Automatic laptop charge control · Windows + Linux · v1.1.1
+Automatic laptop charge control · Windows + Linux · v1.1.2
 
 ![VoltGuard UI](./image.png)
 </div>
@@ -18,16 +18,16 @@ Download the distributions from [GitHub Releases](https://github.com/Yev94/voltg
 
 ### Windows
 
-Run `VoltGuard_1.1.1_Windows_Setup.exe`. The installer offers login startup, enabled by default. It registers the installed application under the current user's `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with `--autostart`. No administrator access or Windows service is required. The panel opens visibly when that user signs in.
+Run `VoltGuard_1.1.2_Windows_Setup.exe`. The installer offers login startup, enabled by default. It registers the installed application under the current user's `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with `--autostart`. No administrator access or Windows service is required. The panel opens visibly when that user signs in.
 
 The existing `%APPDATA%\VoltGuard\config.json` location is retained. The first v1.1 load migrates old 15–85 or 20–95 limits to **40–95**, shows the panel and requires the charging plug to be verified again. The password stays in Windows Credential Locker. Normal subsequent settings edits are preserved.
 
 ### Linux (including KDE Plasma / Wayland)
 
-Extract `VoltGuard-1.1.1-Linux.tar.gz`. On Ubuntu/Kubuntu install desktop dependencies if missing:
+Extract `VoltGuard-1.1.2-Linux.tar.gz`. On Ubuntu/Kubuntu install desktop dependencies if missing:
 
 ```bash
-sudo apt install python3-venv python3-tk python3-gi gir1.2-ayatanaappindicator3-0.1
+sudo apt install python3-venv python3-tk python3-gi python3-dbus gir1.2-ayatanaappindicator3-0.1
 bash scripts/install-linux.sh
 ```
 
@@ -36,6 +36,14 @@ The installer copies only application code/assets into `${XDG_DATA_HOME:-~/.loca
 Open **VoltGuard** from the application menu. Per-user login startup is registered at `${XDG_CONFIG_HOME:-~/.config}/autostart/voltguard.desktop`. It opens the same visible panel; no background service or second implementation is created. The tray uses AppIndicator/Ayatana on Linux. If a usable tray cannot be created, the panel stays visible.
 
 Passwords use the secure desktop keyring (KWallet / Secret Service); unlock the wallet privately if prompted. VoltGuard will not save a password into JSON or fall back to an insecure plaintext backend.
+
+### Saved credentials across sessions
+
+The OS wallet binding is stored as non-secret `credential_backend` metadata. On KDE, VoltGuard waits for KWallet instead of switching to Secret Service when KWallet starts a moment later. A locked or delayed wallet is retried with backoff; the panel stays in its existing visible/hidden state. A missing saved password and denied wallet access are reported separately and do not become repeated login/dialog attempts. Unlock the desktop wallet through its normal private UI if needed; do not reset the Meross password to fix a delayed wallet.
+
+Saving settings or starting monitoring does **not** rewrite a loaded password. Only an explicit password edit or explicit legacy import writes the secret, to the same bound wallet. Existing entries and other applications' legacy wallet folders are not migrated or deleted.
+
+If wallet loading is delayed at login -> keep the existing credential binding, wait for that wallet, and retry the read; never infer that the Meross password changed or copy a cached password to a different store.
 
 ## Configure and verify the charging plug
 
