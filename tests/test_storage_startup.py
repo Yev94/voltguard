@@ -6,48 +6,106 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from keyring.backend import KeyringBackend
+from src.credential_store import CredentialUnavailable
 from src.config_manager import ConfigManager
 from src.autostart import configure_autostart, desktop_entry, launch_command
 from src.paths import config_dir
 from filelock import FileLock, Timeout
 
 
-class SecureTestKeyring(KeyringBackend):
-    priority = 1
-    def get_password(self, service, username): return None
-    def set_password(self, service, username, password): pass
-    def delete_password(self, service, username): pass
+class FakeStore:
+    backend_id = 'kwallet'
+    def __init__(self, value=None):
+        self.value=value
+        self.reads=0
+        self.writes=[]
+        self.unavailable=False
+    def read(self, account):
+        self.reads+=1
+        if self.unavailable: raise CredentialUnavailable('wallet_not_ready')
+        return self.value
+    def write(self, account, value):
+        if self.unavailable: raise CredentialUnavailable('wallet_locked')
+        self.writes.append((account,value))
+        self.value=value
 
 
 class SettingsTests(unittest.TestCase):
     def test_legacy_policy_migrates_without_activating_unconfirmed_plug(self):
-        with tempfile.TemporaryDirectory() as folder, patch('keyring.get_password',return_value='test-secret'):
+        with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/'config.json'
             original=json.dumps({'email':'example@example.invalid','uuid':'test-plug','min_bat':20,'max_bat':95,'password':'legacy-secret','start_minimized':True})
             path.write_text(original)
-            cfg=ConfigManager(path)
+            store=FakeStore('test-secret')
+            cfg=ConfigManager(path,credential_store=store)
             self.assertEqual((cfg.config['min_bat'],cfg.config['max_bat']),(40,95))
             self.assertFalse(cfg.config['start_minimized'])
             self.assertFalse(cfg.is_confirmed())
             self.assertEqual(path.read_text(),original)
-            with patch('keyring.get_keyring',return_value=SecureTestKeyring()),patch('keyring.set_password') as save:
-                self.assertTrue(cfg.raw_save())
-                save.assert_called_once_with('VoltGuard','example@example.invalid','test-secret')
+            self.assertTrue(cfg.raw_save())
+            self.assertEqual(store.writes,[])
             written=json.loads(path.read_text())
             self.assertNotIn('password',written)
             self.assertNotIn('legacy-secret',path.read_text())
+            self.assertEqual(written['credential_backend'],'kwallet')
 
-    def test_current_settings_are_preserved_and_failed_vault_does_not_write(self):
+    def test_current_settings_save_without_rewriting_a_locked_wallet(self):
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/'config.json'
-            path.write_text(json.dumps({'schema_version':2,'min_bat':45,'max_bat':90}))
-            cfg=ConfigManager(path)
-            self.assertEqual(cfg.config['min_bat'],45)
+            path.write_text(json.dumps({'schema_version':2,'email':'example@example.invalid','min_bat':20,'max_bat':95}))
+            store=FakeStore('existing-fixture')
+            cfg=ConfigManager(path,credential_store=store)
+            store.unavailable=True
+            self.assertTrue(cfg.raw_save())
+            self.assertEqual(store.writes,[])
+            self.assertEqual(json.loads(path.read_text())['min_bat'],20)
+
+    def test_failed_explicit_password_edit_preserves_settings(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'config.json'
+            path.write_text(json.dumps({'schema_version':2,'email':'example@example.invalid'}))
+            store=FakeStore('existing-fixture')
+            cfg=ConfigManager(path,credential_store=store)
             before=path.read_text()
-            with patch('keyring.get_keyring',side_effect=RuntimeError('private detail')):
-                self.assertFalse(cfg.raw_save())
+            cfg.password='new-fixture'
+            store.unavailable=True
+            self.assertFalse(cfg.raw_save())
             self.assertEqual(path.read_text(),before)
+            self.assertEqual(store.value,'existing-fixture')
+
+    def test_delayed_wallet_recovers_and_new_process_uses_same_binding(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'config.json'
+            path.write_text(json.dumps({'schema_version':2,'email':'example@example.invalid','min_bat':20,'max_bat':95}))
+            store=FakeStore('saved-fixture')
+            store.unavailable=True
+            cfg=ConfigManager(path,credential_store=store)
+            self.assertFalse(cfg.password)
+            self.assertEqual(cfg.credential_state,'wallet_not_ready')
+            store.unavailable=False
+            self.assertTrue(cfg.reload_password())
+            self.assertTrue(cfg.raw_save())
+            with patch('src.config_manager.CredentialStore',return_value=store) as factory:
+                restarted=ConfigManager(path)
+            factory.assert_called_once_with('kwallet')
+            self.assertEqual(restarted.password,'saved-fixture')
+            self.assertEqual(restarted.config['credential_backend'],'kwallet')
+            self.assertEqual(restarted.config['min_bat'],20)
+            self.assertEqual(store.writes,[])
+
+    def test_repeated_validation_does_not_drop_a_pending_password_edit(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'config.json'
+            path.write_text(json.dumps({'schema_version':2,'email':'example@example.invalid'}))
+            store=FakeStore('saved-fixture')
+            cfg=ConfigManager(path,credential_store=store)
+            cfg.password='edited-fixture'
+            cfg.password='edited-fixture'
+            self.assertTrue(cfg.reload_password())
+            self.assertEqual(cfg.password,'edited-fixture')
+            self.assertTrue(cfg.raw_save())
+            self.assertTrue(cfg.raw_save())
+            self.assertEqual(store.writes,[('example@example.invalid','edited-fixture')])
 
     def test_paths_without_appdata(self):
         with patch('sys.platform','linux'),patch.dict(os.environ,{'XDG_CONFIG_HOME':'/tmp/vg-config'}):
