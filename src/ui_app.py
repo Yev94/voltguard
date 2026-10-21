@@ -14,7 +14,7 @@ import pystray
 
 from src.logger_config import get_logger
 from src.config_manager import ConfigManager
-from src.battery_backend import BatteryBackend
+from src.battery_backend import BatteryBackend, COMMAND_COOLDOWN_SECONDS
 from src.load_policy import LOAD_DEFAULTS, validate_load_settings
 from src.load_report import summarize
 from src import __version__
@@ -77,6 +77,7 @@ class VoltGuardApp:
         self.backend = BatteryBackend(self.cfg_manager, self.log, self.set_status, self.set_metrics)
         
         self.testing_plug = False
+        self.manual_pending = False
         self.thread = None
         self.tray_icon = None
         self.tray_starting = False
@@ -117,6 +118,9 @@ class VoltGuardApp:
 
     def _auto_start(self):
         if self.closing or not self._auto_start_requested or self.backend.running:
+            return
+        if getattr(self, "testing_plug", False) or getattr(self, "manual_pending", False):
+            self.root.after(250, self._auto_start)
             return
         if not self.cfg_manager.config.get("auto_monitor"):
             self._auto_start_requested = False
@@ -465,15 +469,18 @@ class VoltGuardApp:
         frame_manual = ctk.CTkFrame(main_frame, fg_color="transparent")
         frame_manual.pack(fill=ctk.X, pady=(0, 6))
 
-        self.btn_on = ctk.CTkButton(frame_manual, text="⚡  Turn ON", command=self.manual_turn_on,
+        self.btn_on = ctk.CTkButton(frame_manual, text="⚡  Encender cargador", command=self.manual_turn_on,
                                     fg_color=YELLOW, hover_color=YELLOW_HOVER, text_color="black",
                                     font=("Roboto", 12), height=36, corner_radius=10)
         self.btn_on.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(0, 4))
 
-        self.btn_off = ctk.CTkButton(frame_manual, text="⏏  Turn OFF", command=self.manual_turn_off,
+        self.btn_off = ctk.CTkButton(frame_manual, text="⏏  Apagar cargador", command=self.manual_turn_off,
                                      fg_color=BLUE, hover_color=BLUE_HOVER, text_color="white",
                                      font=("Roboto", 12), height=36, corner_radius=10)
         self.btn_off.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(4, 0))
+        ctk.CTkLabel(main_frame,
+                     text=f"Los botones manuales no detienen la revisión automática.\nEspera mínima de {COMMAND_COOLDOWN_SECONDS} s antes de una corrección automática.",
+                     font=("Roboto", 11), text_color="#888899", justify="left", wraplength=420).pack(anchor="w", pady=(0, 6))
 
         frame_utils = ctk.CTkFrame(main_frame, fg_color="transparent")
         frame_utils.pack(fill=ctk.X, pady=(0, 6))
@@ -514,6 +521,13 @@ class VoltGuardApp:
     def _noop(self):
         pass
 
+    def _update_manual_buttons(self):
+        busy = self.demo or self.testing_plug or self.manual_pending
+        self.btn_on.configure(state="disabled" if busy else "normal", command=self.manual_turn_on,
+                              fg_color=YELLOW, hover_color=YELLOW_HOVER, text_color="black")
+        self.btn_off.configure(state="disabled" if busy else "normal", command=self.manual_turn_off,
+                               fg_color=BLUE, hover_color=BLUE_HOVER, text_color="white")
+
     def set_gui_state(self, is_running):
         state = "disabled" if is_running else "normal"
         self.entry_email.configure(state=state)
@@ -537,10 +551,6 @@ class VoltGuardApp:
                                     text_color="white", command=self.stop_monitor)
             self.btn_test.configure(fg_color=TEAL_OFF, hover_color=TEAL_OFF,
                                     text_color="#1A4040", command=self._noop)
-            self.btn_on.configure(fg_color=YELLOW_OFF, hover_color=YELLOW_OFF,
-                                  text_color="#4A3010", command=self._noop)
-            self.btn_off.configure(fg_color=BLUE_OFF, hover_color=BLUE_OFF,
-                                   text_color="#1E3050", command=self._noop)
         else:
             self.btn_start.configure(fg_color=GREEN, hover_color=GREEN_HOVER,
                                      text_color="white", command=self.start_monitor)
@@ -548,14 +558,11 @@ class VoltGuardApp:
                                     text_color="#554444", command=self._noop)
             self.btn_test.configure(fg_color=TEAL, hover_color=TEAL_HOVER,
                                     text_color="white", command=self.run_test_plug)
-            self.btn_on.configure(fg_color=YELLOW, hover_color=YELLOW_HOVER,
-                                  text_color="black", command=self.manual_turn_on)
-            self.btn_off.configure(fg_color=BLUE, hover_color=BLUE_HOVER,
-                                   text_color="white", command=self.manual_turn_off)
+        self._update_manual_buttons()
 
     # ================= LOGICA DE ARRANQUE =================
     def start_monitor(self):
-        if self.demo or self.backend.running: return
+        if self.demo or self.backend.running or self.testing_plug or self.manual_pending: return
         is_valid, err = self.validate_inputs()
         if not is_valid:
             self.log(f"Validation error: {err}", is_error=True)
@@ -603,7 +610,22 @@ class VoltGuardApp:
         if not self.cfg_manager.is_confirmed():
             self.log("Verify and confirm the laptop charging plug first.", is_error=True)
             return
-        if self.demo or self.backend.running or self.testing_plug: return
+        if self.demo or self.testing_plug or self.manual_pending: return
+        if self.backend.running:
+            self.manual_pending = True
+            self._update_manual_buttons()
+            completion = lambda success: self.post_ui(self._finish_manual, success, False)
+            try:
+                accepted = self.backend.queue_manual(turn_on, completion)
+            except ValueError:
+                accepted = False
+            if not accepted:
+                self.manual_pending = False
+                self._update_manual_buttons()
+                self.log("Manual request unavailable; wait for the current operation and retry.", is_error=True)
+                return
+            self.log("Manual " + ("ON" if turn_on else "OFF") + " requested; automatic monitoring continues.")
+            return
         is_valid, err = self.validate_inputs()
         if not is_valid:
             self.log(f"Validation error: {err}", is_error=True)
@@ -611,6 +633,7 @@ class VoltGuardApp:
         if not self.cfg_manager.raw_save(): return
         
         self.testing_plug = True
+        self.manual_pending = True
         self.set_gui_state(True)
         action = "ON" if turn_on else "OFF"
         self.log(f"Manual control: Turning {action}...")
@@ -664,13 +687,24 @@ class VoltGuardApp:
                 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        success = False
         try:
-            loop.run_until_complete(self.backend.async_manual_control(turn_on))
+            success = loop.run_until_complete(self.backend.async_manual_control(turn_on))
         finally:
             loop.close()
+            self.post_ui(self._finish_manual, success, True)
+
+    def _finish_manual(self, success, standalone):
+        self.manual_pending = False
+        if standalone:
             self.testing_plug = False
-            self.post_ui(self.set_gui_state, False)
-            self.post_ui(self.set_status, "Stopped", "gray")
+            self.set_gui_state(self.backend.running)
+            if not self.backend.running:
+                self.set_status("Stopped", "gray")
+            if self._auto_start_requested:
+                self.root.after(100, self._auto_start)
+        else:
+            self._update_manual_buttons()
 
     def _confirm_plug(self, info):
         approved = self.cfg_manager.config.get("approved_uuid") == info["uuid"]
