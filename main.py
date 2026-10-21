@@ -3,10 +3,12 @@ import os
 import sys
 from filelock import FileLock, Timeout
 from src.paths import config_dir
+from src import __version__
 
 
 def run():
     parser = argparse.ArgumentParser(description="VoltGuard: shared Windows/Linux charge controller")
+    parser.add_argument("--version", action="version", version=f"VoltGuard {__version__}")
     parser.add_argument("--autostart", action="store_true", help="Login startup with visible panel")
     parser.add_argument("--install-autostart", action="store_true", help="Register this installation at login")
     parser.add_argument("--import-legacy", metavar="CONFIG", help="Migrate a local config into secure OS storage")
