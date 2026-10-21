@@ -3,7 +3,7 @@
 
 # VoltGuard 🔋🔌
 
-Automatic laptop charge control · Windows + Linux · v1.2.0
+Automatic laptop charge control · Windows + Linux · v1.2.1
 
 ![VoltGuard UI](./image.png)
 </div>
@@ -18,13 +18,13 @@ Download the distributions from [GitHub Releases](https://github.com/Yev94/voltg
 
 ### Windows
 
-Run `VoltGuard_1.2.0_Windows_Setup.exe`. The installer offers login startup, enabled by default. It registers the installed application under the current user's `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with `--autostart`. No administrator access or Windows service is required. The panel opens visibly when that user signs in.
+Run `VoltGuard_1.2.1_Windows_Setup.exe`. The installer offers login startup, enabled by default. It registers the installed application under the current user's `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with `--autostart`. No administrator access or Windows service is required. The panel opens visibly when that user signs in.
 
 The existing `%APPDATA%\VoltGuard\config.json` location is retained. The first v1.1 load migrates old 15–85 or 20–95 limits to **40–95**, shows the panel and requires the charging plug to be verified again. The password stays in Windows Credential Locker. Normal subsequent settings edits are preserved.
 
 ### Linux (including KDE Plasma / Wayland)
 
-Extract `VoltGuard-1.2.0-Linux.tar.gz`. On Ubuntu/Kubuntu install desktop dependencies if missing:
+Extract `VoltGuard-1.2.1-Linux.tar.gz`. On Ubuntu/Kubuntu install desktop dependencies if missing:
 
 ```bash
 sudo apt install python3-venv python3-tk python3-gi python3-dbus gir1.2-ayatanaappindicator3-0.1
@@ -61,7 +61,7 @@ Enable **Keep charger ON during sustained load**, save settings and start monito
 | Setting | Initial value |
 | --- | --- |
 | Enter assist | CPU **≥75% OR GPU ≥50%**, sustained for **15 seconds** |
-| Leave assist | CPU **<35% AND GPU <20%**, continuously for **180 seconds** |
+| Leave assist | CPU **<35% AND GPU <40%**, continuously for **180 seconds** |
 | Minimum powered time | **300 seconds** after acknowledged ON or observed AC |
 | Sensor/control cadence while enabled | **5 seconds** |
 
@@ -69,7 +69,7 @@ All thresholds and dwell times are editable. A brief spike does not turn the cha
 
 Unknown battery/AC readings never issue commands. Missing/stale GPU or CPU readings never count as idle; an active override waits for both sensors to recover before disconnecting. There is no unlock, driver change, power-profile change or forced load test. CPU uses psutil; NVIDIA GPUs use a bounded, read-only `nvidia-smi` query (Windows/Linux); Linux AMD GPUs can use `gpu_busy_percent` from sysfs. The busiest supported GPU drives the threshold. Unsupported GPUs appear as **n/a**; do not enable automatic load release on such a system until GPU telemetry is available. The first nonblocking CPU sample is discarded.
 
-The initial thresholds are practical starting values, not hardware limits. A 61-second passive sample on this RTX 4070 Laptop system (21 October 2026) observed CPU 2.1–16.1%, GPU 8–40%, clocks 210–315 MHz and GPU power 4.15–5.08 W, with AC present or unavailable. This puts the entry thresholds above that observed activity; it does not establish the cause of stutter or demonstrate battery-versus-AC performance. NVIDIA utilization measures activity during a sample interval, not frame-time smoothness ([NVIDIA device queries](https://docs.nvidia.com/deploy/nvml-api/latest/api/group__nvmlDeviceQueries.html)); the CPU initialization behavior is documented by [psutil](https://psutil.readthedocs.io/stable/index.html).
+The initial thresholds are practical starting values, not hardware limits. A 61-second passive sample on this RTX 4070 Laptop system (21 October 2026) observed CPU 2.1–16.1%, GPU 8–40%, clocks 210–315 MHz and GPU power 4.15–5.08 W, with AC present or unavailable. A later 20-minute trace with low clocks/watts showed GPU median 24% and 90th percentile 31%; the former GPU exit threshold of 20% never held for more than 15 seconds. The 40% exit default allows the idle dwell to complete under this measured light activity, while preserving the 50% entry threshold and both dwell timers. Existing profiles retaining the old 20% GPU exit setting need it adjusted in the panel. This puts the entry thresholds above that observed activity; it does not establish the cause of stutter or demonstrate battery-versus-AC performance. NVIDIA utilization measures activity during a sample interval, not frame-time smoothness ([NVIDIA device queries](https://docs.nvidia.com/deploy/nvml-api/latest/api/group__nvmlDeviceQueries.html)); the CPU initialization behavior is documented by [psutil](https://psutil.readthedocs.io/stable/index.html).
 
 **Tracking:** while load assist monitoring runs, `load-telemetry.jsonl` in the normal log directory records timestamp, CPU/GPU usage, clocks, GPU watts, battery/AC, assist phase, decision reason and requested/acknowledged commands. Four rotating files cap storage at approximately **20 MB**. No email, password, device identifier, process list or cloud payload is recorded or uploaded. Local sampling continues during cloud connection failures, but it does not introduce new hardware commands or bypass verification.
 

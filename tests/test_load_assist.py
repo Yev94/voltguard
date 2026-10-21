@@ -67,6 +67,29 @@ class LoadPolicyTests(unittest.TestCase):
             self.assertIsNone(self.tick(at, ac=True).action)
         self.assertEqual(self.tick(580, ac=True).action, "off")
 
+    def test_light_gpu_baseline_releases_instead_of_latching_charger_indefinitely(self):
+        # Observed desktop activity: utilization remains 24–31% at low clocks/watts.
+        # The former 20% exit threshold never completed its idle dwell on this pattern.
+        pattern = (24, 31, 18, 25, 24, 30, 24, 39)
+        first_off = {}
+        for threshold in (20, LOAD_DEFAULTS["load_gpu_off"]):
+            self.setUp()
+            self.cfg["load_gpu_off"] = threshold
+            self.activate()
+            for index, at in enumerate(range(20, 620, 5)):
+                decision = self.tick(at, cpu=5, gpu=pattern[index % len(pattern)], percent=100, ac=True)
+                if decision.action == "off":
+                    first_off[threshold] = at
+                    break
+        self.assertNotIn(20, first_off)
+        self.assertEqual(first_off[LOAD_DEFAULTS["load_gpu_off"]], 315)
+
+    def test_gpu_at_exit_boundary_does_not_count_as_idle(self):
+        self.activate()
+        for at in range(20, 500, 5):
+            self.assertIsNone(self.tick(at, cpu=5, gpu=self.cfg["load_gpu_off"], percent=100, ac=True).action)
+        self.assertTrue(self.policy.active)
+
     def test_minimum_battery_cycle_wins_over_idle_release(self):
         for at in range(0, 16, 5):
             self.tick(at, gpu=80, percent=20)

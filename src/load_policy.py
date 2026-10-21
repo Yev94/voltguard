@@ -6,7 +6,7 @@ SAMPLE_SECONDS = 5
 LOAD_DEFAULTS = {
     "load_enabled": False,
     "load_cpu_on": 75, "load_cpu_off": 35,
-    "load_gpu_on": 50, "load_gpu_off": 20,
+    "load_gpu_on": 50, "load_gpu_off": 40,
     "load_on_seconds": 15, "load_off_seconds": 180, "load_min_on_seconds": 300,
 }
 
