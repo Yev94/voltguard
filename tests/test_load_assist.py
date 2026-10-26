@@ -172,7 +172,7 @@ class LoadBackendTests(unittest.IsolatedAsyncioTestCase):
     async def tick(self, at, gpu, percent=60, ac=False):
         self.now = at
         self.backend._sample = LoadSample(at, 10, gpu)
-        with patch("src.battery_backend.psutil.sensors_battery", return_value=battery(percent, ac)):
+        with patch("src.battery_backend.read_battery", return_value=battery(percent, ac)):
             await self.backend._poll_once(self.dev)
 
     async def test_real_policy_path_sends_load_on_and_logs_acknowledged_reason(self):
@@ -222,7 +222,7 @@ class LoadBackendTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict("os.environ", {"VOLTGUARD_DEMO": "0"}), \
              patch("src.battery_backend.TelemetryRecorder", return_value=recorder), \
              patch("src.battery_backend.LoadSampler") as sampler, \
-             patch("src.battery_backend.psutil.sensors_battery", return_value=battery()):
+             patch("src.battery_backend.read_battery", return_value=battery()):
             sampler.return_value.sample.return_value = LoadSample(0, 10, 50)
             await asyncio.wait_for(self.backend.monitor_loop(), 2)
         self.assertTrue(any(call.args[0] == "sample" for call in recorder.record.call_args_list))

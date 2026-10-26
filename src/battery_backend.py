@@ -7,11 +7,11 @@ import time
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 
-import psutil
 from meross_iot.http_api import MerossHttpClient
 from meross_iot.manager import MerossManager
 from meross_iot.model.enums import OnlineStatus
 from src.presentation import battery_percentage
+from src.battery_sensors import read_battery
 from src.load_policy import PowerPolicy, SAMPLE_SECONDS, validate_load_settings
 from src.load_sensors import LoadSampler
 from src.telemetry import TelemetryRecorder
@@ -166,7 +166,7 @@ class BatteryBackend:
             return False
         action = "on" if turn_on else "off"
         self._reason = "manual"
-        battery = psutil.sensors_battery()
+        battery = read_battery()
         self._record("command_requested", battery, action)
         self._last_action_at = self._now()
         try:
@@ -191,7 +191,7 @@ class BatteryBackend:
         return True
 
     async def _poll_once(self, plug):
-        battery = psutil.sensors_battery()
+        battery = read_battery()
         decision = self.policy.decide(battery, self._sample, self.cfg.config, self._now())
         action = decision.action
         self._reason = decision.reason
@@ -199,8 +199,11 @@ class BatteryBackend:
         if key != self._last_decision:
             self._record("decision", battery, action)
             self._last_decision = key
-        if battery is None or battery.power_plugged is None:
+        if battery is None:
             self.set_status("Battery reading unavailable; waiting", "orange")
+            return
+        if battery.power_plugged is None:
+            self.set_status(f"Charger status unavailable · {battery_percentage(battery.percent)}; waiting", "orange")
             return
         if action is None:
             self._attempts = {"on": 0, "off": 0}
@@ -222,7 +225,7 @@ class BatteryBackend:
                 self.policy.confirm_on(self._now())
             return
         # Network work may take time. Recheck battery immediately before the command.
-        current = psutil.sensors_battery()
+        current = read_battery()
         latest = self.policy.decide(current, self._sample, self.cfg.config, self._now())
         if not self.running or latest.action != action or not self._manual_requests.empty():
             return
@@ -277,7 +280,7 @@ class BatteryBackend:
             started = time.monotonic()
             try:
                 self._sample = await asyncio.get_running_loop().run_in_executor(worker, sampler.sample)
-                battery = psutil.sensors_battery()
+                battery = read_battery()
                 self._sample_battery = battery
                 self._record("sample", battery)
                 def pct(value):

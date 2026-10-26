@@ -12,6 +12,8 @@ VoltGuard uses one Python codebase to read the laptop battery with `psutil` and 
 
 The default policy is **ON at or below 40% while disconnected from AC**, and **OFF at or above 95% while connected to AC**, checked every 60 seconds. In between, it leaves the relay alone. Missing battery readings, unknown AC status, offline devices and unknown relay state never trigger a power command. Commands are acknowledged, rate limited and retried at most three times per threshold crossing. Only one controller can run per user.
 
+On Linux, when psutil cannot determine AC status, VoltGuard reads external power supplies by their sysfs `type` and `online` fields, including adapters named `ADP1` and USB-C supplies. A battery reporting `Not charging` can still have AC connected; that status alone does not mean disconnected. Missing or ambiguous supply data continues to pause control, with a separate charger-status message that preserves the battery percentage.
+
 ## Install or update
 
 Download the distributions from [GitHub Releases](https://github.com/Yev94/voltguard/releases). CI artifacts are available on the [Actions page](https://github.com/Yev94/voltguard/actions) for branch builds. The old `Release/VoltGuard_Installer.exe` retained in the repository is **v1.0.0 for Windows**, not the current cross-platform installer.

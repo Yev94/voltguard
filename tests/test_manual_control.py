@@ -31,7 +31,7 @@ class ManualBackendTests(unittest.IsolatedAsyncioTestCase):
         dev.is_on.side_effect = [False, True]
         self.backend.connection = MagicMock(side_effect=AssertionError("Do not open another connection"))
         self.assertTrue(self.backend.queue_manual(True, self.done))
-        with patch("src.battery_backend.psutil.sensors_battery", return_value=battery(100, True)):
+        with patch("src.battery_backend.read_battery", return_value=battery(100, True)):
             self.assertTrue(await self.backend._process_manual(dev))
             self.now = 5
             await self.backend._poll_once(dev)
@@ -61,7 +61,7 @@ class ManualBackendTests(unittest.IsolatedAsyncioTestCase):
         self.backend._sleep = pause
         self.backend._poll_once = AsyncMock()
         self.backend.queue_manual(True, self.done)
-        with patch("src.battery_backend.psutil.sensors_battery", return_value=battery()):
+        with patch("src.battery_backend.read_battery", return_value=battery()):
             await self.backend._monitor_connections()
         self.done.assert_called_once_with(True)
         self.backend._poll_once.assert_awaited_once()
@@ -74,7 +74,7 @@ class ManualBackendTests(unittest.IsolatedAsyncioTestCase):
             dev.async_update.side_effect = None
             self.assertTrue(self.backend.queue_manual(True, self.done))
         dev.async_update.side_effect = enqueue
-        with patch("src.battery_backend.psutil.sensors_battery", return_value=battery(100, True)):
+        with patch("src.battery_backend.read_battery", return_value=battery(100, True)):
             await self.backend._poll_once(dev)
             dev.async_turn_off.assert_not_awaited()
             await self.backend._process_manual(dev)
@@ -84,7 +84,7 @@ class ManualBackendTests(unittest.IsolatedAsyncioTestCase):
     async def test_failed_manual_ack_releases_buttons_without_stopping_monitor(self):
         dev = plug(False)
         self.backend.queue_manual(True, self.done)
-        with patch("src.battery_backend.psutil.sensors_battery", return_value=battery()):
+        with patch("src.battery_backend.read_battery", return_value=battery()):
             await self.backend._process_manual(dev)
         self.done.assert_called_once_with(False)
         dev.async_turn_on.assert_awaited_once()
@@ -162,7 +162,7 @@ class ManualBackendTests(unittest.IsolatedAsyncioTestCase):
         async def connected():
             yield [], dev
         self.backend.connection = connected
-        with patch("src.battery_backend.psutil.sensors_battery", return_value=battery()):
+        with patch("src.battery_backend.read_battery", return_value=battery()):
             self.assertTrue(await self.backend.async_manual_control(True))
         self.assertFalse(self.backend.running)
         dev.async_turn_on.assert_awaited_once()
