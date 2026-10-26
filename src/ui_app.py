@@ -14,7 +14,10 @@ import pystray
 
 from src.logger_config import get_logger
 from src.config_manager import ConfigManager
-from src.battery_backend import BatteryBackend
+from src.battery_backend import BatteryBackend, COMMAND_COOLDOWN_SECONDS
+from src.load_policy import LOAD_DEFAULTS, validate_load_settings
+from src.load_report import summarize
+from src import __version__
 
 logger = get_logger()
 
@@ -53,7 +56,7 @@ class VoltGuardApp:
         self._auto_start_requested = False
         self._credential_retry_delay = 2000
         self.root.after(50, self._drain_ui_queue)
-        self.root.title("VoltGuard")
+        self.root.title(f"VoltGuard · {__version__}")
         self.root.geometry(f"500x{min(960, max(500, self.root.winfo_screenheight() - 120))}")
         self.root.resizable(False, True)
 
@@ -71,9 +74,10 @@ class VoltGuardApp:
         ctk.set_default_color_theme("blue")
         
         self.cfg_manager = ConfigManager(demo=demo)
-        self.backend = BatteryBackend(self.cfg_manager, self.log, self.set_status)
+        self.backend = BatteryBackend(self.cfg_manager, self.log, self.set_status, self.set_metrics)
         
         self.testing_plug = False
+        self.manual_pending = False
         self.thread = None
         self.tray_icon = None
         self.tray_starting = False
@@ -114,6 +118,9 @@ class VoltGuardApp:
 
     def _auto_start(self):
         if self.closing or not self._auto_start_requested or self.backend.running:
+            return
+        if getattr(self, "testing_plug", False) or getattr(self, "manual_pending", False):
+            self.root.after(250, self._auto_start)
             return
         if not self.cfg_manager.config.get("auto_monitor"):
             self._auto_start_requested = False
@@ -177,6 +184,9 @@ class VoltGuardApp:
 
     def set_status(self, text, color="white"):
         self.post_ui(lambda: self.status_label.configure(text=text, text_color=color))
+
+    def set_metrics(self, text):
+        self.post_ui(lambda: self.metrics_label.configure(text=text))
 
     # ================= PYSTRAY (WINDOW MGMT) =================
     def _crear_icono_tray(self):
@@ -265,6 +275,10 @@ class VoltGuardApp:
             if min_bat >= max_bat: raise ValueError("Minimum must be less than maximum.")
             if check_time < 5: raise ValueError("Check interval >= 5 seconds.")
             if not test_mode and not uuid: raise ValueError("UUID required.")
+            load_settings = validate_load_settings({
+                "load_enabled": bool(self.chk_load.get()),
+                **{key: int(entry.get()) for key, entry in self.load_entries.items()},
+            })
             
             if new_email != current_saved_email or uuid != self.cfg_manager.config.get("uuid", ""):
                 self.cfg_manager.config["confirmed_uuid"] = ""
@@ -276,6 +290,7 @@ class VoltGuardApp:
             self.cfg_manager.config["start_minimized"] = bool(self.chk_minimized.get())
             self.cfg_manager.config["auto_monitor"] = bool(self.chk_auto.get())
             self.cfg_manager.config["start_at_login"] = bool(self.chk_login.get())
+            self.cfg_manager.config.update(load_settings)
                 
             return True, ""
         except ValueError as e:
@@ -300,7 +315,7 @@ class VoltGuardApp:
 
         title_block = ctk.CTkFrame(header, fg_color="transparent")
         title_block.pack(side=ctk.LEFT, pady=12)
-        ctk.CTkLabel(title_block, text="VoltGuard",
+        ctk.CTkLabel(title_block, text=f"VoltGuard {__version__}",
                      font=("Roboto", 18, "bold"), text_color="white").pack(anchor="w")
         ctk.CTkLabel(title_block, text="Automatic charge control",
                      font=("Roboto", 11), text_color="#8888AA").pack(anchor="w")
@@ -388,9 +403,52 @@ class VoltGuardApp:
         self.chk_login.pack(anchor="w", padx=12, pady=(4, 8))
         if self.cfg_manager.config.get("start_at_login"):
             self.chk_login.select()
-        self.btn_save = ctk.CTkButton(frame_param, text="Save settings", command=self.save_settings,
+
+        # Load assist uses the same controller and confirmed plug as battery monitoring.
+        frame_load = ctk.CTkFrame(main_frame, fg_color=BG_CARD, corner_radius=12)
+        frame_load.pack(fill=ctk.X, pady=4)
+        self._section_label(frame_load, "PERFORMANCE · CPU / GPU")
+        self.chk_load = ctk.CTkCheckBox(frame_load, text="Keep charger ON during sustained load",
+                                      font=("Roboto", 12), checkbox_width=18, checkbox_height=18,
+                                      fg_color=CHK_COLOR, hover_color=CHK_HOVER)
+        self.chk_load.pack(anchor="w", padx=12, pady=(4, 6))
+        if self.cfg_manager.config.get("load_enabled"):
+            self.chk_load.select()
+        ctk.CTkLabel(frame_load, text="CPU OR GPU high → ON. Both idle → release.\nHigh load can keep charging above the battery maximum.",
+                     font=("Roboto", 11), text_color="#CCCCDD", justify="left").pack(anchor="w", padx=12, pady=(0, 6))
+        load_grid = ctk.CTkFrame(frame_load, fg_color="transparent")
+        load_grid.pack(fill=ctk.X, padx=12)
+        load_grid.columnconfigure(1, weight=1)
+        self.load_entries = {}
+        fields = (
+            ("load_cpu_on", "CPU high (%):"), ("load_cpu_off", "CPU idle below (%):"),
+            ("load_gpu_on", "GPU high (%):"), ("load_gpu_off", "GPU idle below (%):"),
+            ("load_on_seconds", "High load for (sec):"),
+            ("load_off_seconds", "Both idle for (sec):"),
+            ("load_min_on_seconds", "Minimum assist time (sec):"),
+        )
+        for row, (key, label) in enumerate(fields):
+            ctk.CTkLabel(load_grid, text=label, **lbl_style).grid(row=row, column=0, sticky="w", pady=3)
+            entry = ctk.CTkEntry(load_grid, **entry_style)
+            entry.grid(row=row, column=1, sticky="e", pady=3)
+            entry.insert(0, str(self.cfg_manager.config.get(key, LOAD_DEFAULTS[key])))
+            entry.bind("<FocusIn>", lambda e, w=entry: w.configure(border_color=INPUT_FOCUS))
+            entry.bind("<FocusOut>", lambda e, w=entry: w.configure(border_color=INPUT_BORDER))
+            self.load_entries[key] = entry
+        self.metrics_label = ctk.CTkLabel(frame_load, text="CPU / GPU: waiting for monitoring",
+                                         font=("Roboto", 11), text_color=TEAL, wraplength=400, justify="left")
+        self.metrics_label.pack(anchor="w", padx=12, pady=(6, 3))
+        report_buttons = ctk.CTkFrame(frame_load, fg_color="transparent")
+        report_buttons.pack(fill=ctk.X, padx=12, pady=5)
+        ctk.CTkButton(report_buttons, text="Mark stutter", command=self.backend.mark_stutter,
+                      width=140, fg_color=GRAY_BTN, hover_color=GRAY_HOVER).pack(side=ctk.LEFT, padx=(0, 8))
+        ctk.CTkButton(report_buttons, text="24h sensor report", command=self.show_load_report,
+                      width=140, fg_color=GRAY_BTN, hover_color=GRAY_HOVER).pack(side=ctk.LEFT)
+        ctk.CTkLabel(frame_load, text="Local sensor history every 5s; no accounts or device IDs.\nSave settings, then START. STOP keeps the current relay state.",
+                     font=("Roboto", 10), text_color="#888899", justify="left").pack(anchor="w", padx=12, pady=(0, 10))
+        self.btn_save = ctk.CTkButton(frame_load, text="Save settings", command=self.save_settings,
                                       fg_color=GRAY_BTN, hover_color=GRAY_HOVER, height=28)
-        self.btn_save.pack(fill=ctk.X, padx=12, pady=(0, 8))
+        self.btn_save.pack(fill=ctk.X, padx=12, pady=(0, 10))
 
         # ── Action buttons ────────────────────────────────────────────────────
         frame_btns = ctk.CTkFrame(main_frame, fg_color="transparent")
@@ -411,15 +469,18 @@ class VoltGuardApp:
         frame_manual = ctk.CTkFrame(main_frame, fg_color="transparent")
         frame_manual.pack(fill=ctk.X, pady=(0, 6))
 
-        self.btn_on = ctk.CTkButton(frame_manual, text="⚡  Turn ON", command=self.manual_turn_on,
+        self.btn_on = ctk.CTkButton(frame_manual, text="⚡  Encender cargador", command=self.manual_turn_on,
                                     fg_color=YELLOW, hover_color=YELLOW_HOVER, text_color="black",
                                     font=("Roboto", 12), height=36, corner_radius=10)
         self.btn_on.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(0, 4))
 
-        self.btn_off = ctk.CTkButton(frame_manual, text="⏏  Turn OFF", command=self.manual_turn_off,
+        self.btn_off = ctk.CTkButton(frame_manual, text="⏏  Apagar cargador", command=self.manual_turn_off,
                                      fg_color=BLUE, hover_color=BLUE_HOVER, text_color="white",
                                      font=("Roboto", 12), height=36, corner_radius=10)
         self.btn_off.pack(side=ctk.LEFT, expand=True, fill=ctk.X, padx=(4, 0))
+        ctk.CTkLabel(main_frame,
+                     text=f"Los botones manuales no detienen la revisión automática.\nEspera mínima de {COMMAND_COOLDOWN_SECONDS} s antes de una corrección automática.",
+                     font=("Roboto", 11), text_color="#888899", justify="left", wraplength=420).pack(anchor="w", pady=(0, 6))
 
         frame_utils = ctk.CTkFrame(main_frame, fg_color="transparent")
         frame_utils.pack(fill=ctk.X, pady=(0, 6))
@@ -447,8 +508,25 @@ class VoltGuardApp:
         self.log_area.pack(fill=ctk.BOTH, expand=True, padx=10, pady=(0, 10))
         self.log_area.configure(state="disabled")
 
+    def show_load_report(self):
+        if self.demo:
+            messagebox.showinfo("Load sensor report", "Preview only. Local sensor history is not accessed.", parent=self.root)
+            return
+        try:
+            report = summarize()
+        except OSError:
+            report = "Local sensor history is unavailable."
+        messagebox.showinfo("Load sensor report · last 24h", report, parent=self.root)
+
     def _noop(self):
         pass
+
+    def _update_manual_buttons(self):
+        busy = self.demo or self.testing_plug or self.manual_pending
+        self.btn_on.configure(state="disabled" if busy else "normal", command=self.manual_turn_on,
+                              fg_color=YELLOW, hover_color=YELLOW_HOVER, text_color="black")
+        self.btn_off.configure(state="disabled" if busy else "normal", command=self.manual_turn_off,
+                               fg_color=BLUE, hover_color=BLUE_HOVER, text_color="white")
 
     def set_gui_state(self, is_running):
         state = "disabled" if is_running else "normal"
@@ -462,6 +540,9 @@ class VoltGuardApp:
         self.chk_auto.configure(state=state)
         self.chk_login.configure(state=state)
         self.btn_save.configure(state=state)
+        self.chk_load.configure(state=state)
+        for entry in self.load_entries.values():
+            entry.configure(state=state)
 
         if is_running:
             self.btn_start.configure(fg_color=GREEN_OFF, hover_color=GREEN_OFF,
@@ -470,10 +551,6 @@ class VoltGuardApp:
                                     text_color="white", command=self.stop_monitor)
             self.btn_test.configure(fg_color=TEAL_OFF, hover_color=TEAL_OFF,
                                     text_color="#1A4040", command=self._noop)
-            self.btn_on.configure(fg_color=YELLOW_OFF, hover_color=YELLOW_OFF,
-                                  text_color="#4A3010", command=self._noop)
-            self.btn_off.configure(fg_color=BLUE_OFF, hover_color=BLUE_OFF,
-                                   text_color="#1E3050", command=self._noop)
         else:
             self.btn_start.configure(fg_color=GREEN, hover_color=GREEN_HOVER,
                                      text_color="white", command=self.start_monitor)
@@ -481,14 +558,11 @@ class VoltGuardApp:
                                     text_color="#554444", command=self._noop)
             self.btn_test.configure(fg_color=TEAL, hover_color=TEAL_HOVER,
                                     text_color="white", command=self.run_test_plug)
-            self.btn_on.configure(fg_color=YELLOW, hover_color=YELLOW_HOVER,
-                                  text_color="black", command=self.manual_turn_on)
-            self.btn_off.configure(fg_color=BLUE, hover_color=BLUE_HOVER,
-                                   text_color="white", command=self.manual_turn_off)
+        self._update_manual_buttons()
 
     # ================= LOGICA DE ARRANQUE =================
     def start_monitor(self):
-        if self.demo or self.backend.running: return
+        if self.demo or self.backend.running or self.testing_plug or self.manual_pending: return
         is_valid, err = self.validate_inputs()
         if not is_valid:
             self.log(f"Validation error: {err}", is_error=True)
@@ -536,7 +610,22 @@ class VoltGuardApp:
         if not self.cfg_manager.is_confirmed():
             self.log("Verify and confirm the laptop charging plug first.", is_error=True)
             return
-        if self.demo or self.backend.running or self.testing_plug: return
+        if self.demo or self.testing_plug or self.manual_pending: return
+        if self.backend.running:
+            self.manual_pending = True
+            self._update_manual_buttons()
+            completion = lambda success: self.post_ui(self._finish_manual, success, False)
+            try:
+                accepted = self.backend.queue_manual(turn_on, completion)
+            except ValueError:
+                accepted = False
+            if not accepted:
+                self.manual_pending = False
+                self._update_manual_buttons()
+                self.log("Manual request unavailable; wait for the current operation and retry.", is_error=True)
+                return
+            self.log("Manual " + ("ON" if turn_on else "OFF") + " requested; automatic monitoring continues.")
+            return
         is_valid, err = self.validate_inputs()
         if not is_valid:
             self.log(f"Validation error: {err}", is_error=True)
@@ -544,6 +633,7 @@ class VoltGuardApp:
         if not self.cfg_manager.raw_save(): return
         
         self.testing_plug = True
+        self.manual_pending = True
         self.set_gui_state(True)
         action = "ON" if turn_on else "OFF"
         self.log(f"Manual control: Turning {action}...")
@@ -597,13 +687,24 @@ class VoltGuardApp:
                 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        success = False
         try:
-            loop.run_until_complete(self.backend.async_manual_control(turn_on))
+            success = loop.run_until_complete(self.backend.async_manual_control(turn_on))
         finally:
             loop.close()
+            self.post_ui(self._finish_manual, success, True)
+
+    def _finish_manual(self, success, standalone):
+        self.manual_pending = False
+        if standalone:
             self.testing_plug = False
-            self.post_ui(self.set_gui_state, False)
-            self.post_ui(self.set_status, "Stopped", "gray")
+            self.set_gui_state(self.backend.running)
+            if not self.backend.running:
+                self.set_status("Stopped", "gray")
+            if self._auto_start_requested:
+                self.root.after(100, self._auto_start)
+        else:
+            self._update_manual_buttons()
 
     def _confirm_plug(self, info):
         approved = self.cfg_manager.config.get("approved_uuid") == info["uuid"]
