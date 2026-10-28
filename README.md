@@ -9,21 +9,21 @@
 
 </div>
 
-A native resident, asynchronous, and modular Windows application designed to **monitor laptop battery**, and automatically turn on/off a **Meross** smart plug based on configurable energy thresholds. Built from scratch prioritizing stability, persistent local connection, and low resource consumption (Daemon).
+Native resident, asynchronous, modular Windows app: **monitors laptop battery** and switches a **Meross** smart plug at configurable thresholds. Designed for stability, persistent local connection and low resource use.
 
 ## 🚀 Key Features
 
-*   **MVC Architecture & Asynchrony:** The core (Backend) handles asynchronous read requests (`meross-iot` and `psutil`) completely decoupled from the visual interface (`customtkinter`).
-*   **Resident Mode (System Tray):** The application is designed to run in the background (Daemon). When pressing the close button, it silently hides next to the Windows clock (`pystray`) and continues operating unattended.
-*   **Cryptographic Vault:** Uses the native Windows credential manager (`keyring` Module). Your actual Meross account password is never saved in local files, protecting and isolating your credentials from plaintext attacks.
-*   **Extreme Resilience & Anti-spam:** If there's a Wi-Fi outage, the app gracefully suspends execution and uses a mathematical rotation function to avoid spamming the hard drive during false network spikes.
-*   **Absolute File Agnostic:** Preserves its own fixed save context in the reserved system folder to avoid collisions between packaged executables. Everything lives peacefully on your local system under a unified structure natively protected by Windows.
+* **MVC/asynchrony:** Backend reads (`meross-iot`, `psutil`) are decoupled from the `customtkinter` UI.
+* **Resident mode:** Closing hides the app in the Windows tray (`pystray`); it continues running unattended.
+* **Credentials:** Native Windows credential manager (`keyring`); the Meross password is never stored in local files or plaintext.
+* **Network failures:** Suspends execution during Wi-Fi outages; log rotation limits disk spam from false network spikes.
+* **Storage:** A fixed Windows-protected system directory avoids collisions between packaged executables.
 
 ---
 
 ## 💻 Requirements
 
-To run this without executing a precompiled `.exe`, make sure you have the active libraries in your environment:
+Source dependencies (unneeded for a precompiled `.exe`):
 
 ```bash
 pip install meross-iot psutil customtkinter pystray keyring pillow python-dotenv
@@ -35,7 +35,7 @@ pip install meross-iot psutil customtkinter pystray keyring pillow python-dotenv
 
 ## 📂 File Architecture
 
-This project applies separation of concerns for easier maintenance:
+Separated components:
 
 ```text
 📁 Project Root
@@ -50,18 +50,17 @@ This project applies separation of concerns for easier maintenance:
 ```
 
 ### Persistent Paths
-Unless modified, the static core of the program will always reside in:
+Default persistent directory:
 > `C:\Users\YOUR_USER\AppData\Roaming\VoltGuard`
 
-- `config.json`: Stores exclusively the Email, the Plug's UUID, and the statistical flat-time checking thresholds.
-- `voltguard.log`: Limited log with auto-deletion (Log rotation at ~1MB max size with 3 time slots on disk) for deep debugging if the visual UI fails.
+- `config.json`: Email, plug UUID and checking thresholds only.
+- `voltguard.log`: Rotating log (~1 MB maximum, three disk slots, old logs deleted) for debugging UI failures.
 
 ---
 
 ## 🛠 Installation and Usage
 
-**Quick Install (Recommended):**
-Download the precompiled installer from the releases page:
+**Precompiled installer:**
 [👉 Download VoltGuard v1.0.0 Installer](https://github.com/Yev94/voltguard/releases/tag/v1.0.0)
 
 **Run from source:**
@@ -73,28 +72,28 @@ Download the precompiled installer from the releases page:
 python main.py
 ```
 
-4. The visual interface will ask on the first login for: **Your email, Password, and the famous Plug UUID**. Once filled in, configure the range fields: `% Min Battery`, `% Max Battery`, and the `Seconds` the engine waits before querying the variable again.
+4. First login: **email, password and plug UUID**. Set `% Min Battery`, `% Max Battery` and polling `Seconds`.
 
 ### Where do I find my Meross UUID?
-Just leave the UUID field blank, input your Meross Email and Password, and click the **🔌 Test Plug** button. The application will log into your Meross account and print a list of all your linked devices alongside their corresponding UUIDs directly in the Activity Log. From there, you can easily copy and paste yours.
+Leave UUID blank, enter Meross email/password and click **🔌 Test Plug**. The Activity Log lists all linked devices and UUIDs; copy yours.
 
 ### Special Active Buttons:
 
-- **🔌 Test Plug**: Pure gold tool. Press this and your Frontend will test the direct asynchrony with the Backend: your plug will attempt to turn on for _2 whole seconds_, and then turn off with a snap. From this, you will get two readings: network latency response, and know if you wrote the UUID correctly.
-- **Start Minimized Option**: Perfect for putting this application into the "*Run at Windows startup*" list of your daily routines. It launches loading the backend straight away, skipping the GUI flash.
+- **🔌 Test Plug**: Tests frontend/backend asynchronous communication, latency and UUID by attempting to turn the plug ON for **2 seconds**, then OFF.
+- **Start Minimized**: Starts the backend immediately without flashing the GUI; useful for Windows startup.
 
 ---
 
 ## 📦 How to Build and Package a Release
 
-If you want to compile the project yourself into a fresh `.exe` and build a Windows installer, follow these steps:
+Build a Windows executable and installer:
 
 1. **Compile the Executable using PyInstaller**
    You need the `pyinstaller` library installed. Run the following command in the project root:
    ```bash
    python -m PyInstaller --noconfirm VoltGuard.spec
    ```
-   *This will generate a standalone `VoltGuard.exe` file inside the `dist/` directory, packaging the Python environment and the application's required assets via the `.spec` file.*
+   Generates standalone `dist/VoltGuard.exe`, including Python and assets specified by `.spec`.
 
 2. **Generate the Windows Installer using Inno Setup**
    You will need [Inno Setup 6](https://jrsoftware.org/isinfo.php) installed on your system.
@@ -108,4 +107,4 @@ If you want to compile the project yourself into a fresh `.exe` and build a Wind
      ```powershell
      & "$env:LocalAppData\Programs\Inno Setup 6\ISCC.exe" VoltGuard.iss
      ```
-   *This single action will pick up the executable from the `dist/` folder and generate the final `VoltGuard_Installer.exe` in the `Release/` folder, ready for distribution.*
+   Packages the executable from `dist/` as `Release/VoltGuard_Installer.exe`.
