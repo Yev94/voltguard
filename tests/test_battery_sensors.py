@@ -50,7 +50,8 @@ class BatterySensorTests(unittest.TestCase):
 
     def test_online_usb_supply_wins_over_offline_mains(self):
         self.supply("ADP1", "Mains", 0)
-        self.supply("ucsi-source-psy-USBC000:001", "USB", 1, scope="System")
+        # Use a portable fixture name; detection relies on type, never the name.
+        self.supply("ucsi-source-psy-USBC000_001", "USB", 1, scope="System")
         self.assertIs(read_battery().power_plugged, True)
 
     def test_all_known_external_supplies_offline(self):
