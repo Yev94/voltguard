@@ -185,14 +185,30 @@ class BatteryBackend:
         self._attempts = {"on": 0, "off": 0}
         if turn_on:
             self.policy.confirm_on(self._now())
+        else:
+            # Si se confirma OFF manual -> cerrar el episodio anterior y exigir un
+            # nuevo disparo sostenido (o batería baja) antes de otro ON automático.
+            self.policy.manual_off()
         self._record("command_confirmed", battery, action)
         suffix = f" Automatic checks continue; {COMMAND_COOLDOWN_SECONDS}s before automatic reversal." if self.running else ""
         self.log(f"Manual command confirmed: {action.upper()}.{suffix}")
         return True
 
+    def _decide(self, battery):
+        was_active = self.policy.active
+        decision = self.policy.decide(battery, self._sample, self.cfg.config, self._now())
+        if self.policy.active and not was_active:
+            settings = validate_load_settings(self.cfg.config)
+            def pct(value):
+                return "n/a" if value is None else f"{value:.1f}%"
+            self.log(f"New load trigger: CPU {pct(self._sample.cpu)} | GPU {pct(self._sample.gpu)}. "
+                     f"CPU ≥{settings['load_cpu_on']}% or GPU ≥{settings['load_gpu_on']}% "
+                     f"sustained for {settings['load_on_seconds']}s.")
+        return decision
+
     async def _poll_once(self, plug):
         battery = read_battery()
-        decision = self.policy.decide(battery, self._sample, self.cfg.config, self._now())
+        decision = self._decide(battery)
         action = decision.action
         self._reason = decision.reason
         key = (action, decision.reason, self.policy.phase)
@@ -226,7 +242,7 @@ class BatteryBackend:
             return
         # Network work may take time. Recheck battery immediately before the command.
         current = read_battery()
-        latest = self.policy.decide(current, self._sample, self.cfg.config, self._now())
+        latest = self._decide(current)
         if not self.running or latest.action != action or not self._manual_requests.empty():
             return
         self._attempts[action] += 1
@@ -313,12 +329,15 @@ class BatteryBackend:
         self._sample = None
         sample_task = None
         if settings["load_enabled"]:
+            self.policy.phase = "waiting_connection"
+            self._reason = "connection_pending"
             if os.environ.get("VOLTGUARD_DEMO") != "1":
                 try:
                     self._telemetry = TelemetryRecorder()
                 except OSError:
                     self.log("Local telemetry unavailable; controller remains active.", is_error=True)
-            self.log("Load assist enabled: CPU or GPU high; both idle to release. Local telemetry every 5s.")
+            self.log(f"Load assist enabled: CPU ≥{settings['load_cpu_on']}% or GPU ≥{settings['load_gpu_on']}% "
+                     f"for {settings['load_on_seconds']}s; both idle to release. Local telemetry every 5s.")
             sample_task = asyncio.create_task(self._sample_loop())
         try:
             await self._monitor_connections()

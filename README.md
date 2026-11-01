@@ -3,7 +3,7 @@
 
 # VoltGuard 🔋🔌
 
-Automatic laptop charge control · Windows + Linux · v1.3.0
+Automatic laptop charge control · Windows + Linux · v1.3.1
 
 ![VoltGuard UI](./image.png)
 </div>
@@ -20,13 +20,13 @@ Download the distributions from [GitHub Releases](https://github.com/Yev94/voltg
 
 ### Windows
 
-Run `VoltGuard_1.3.0_Windows_Setup.exe`. The installer offers login startup, enabled by default. It registers the installed application under the current user's `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with `--autostart`. No administrator access or Windows service is required. The panel opens visibly when that user signs in.
+Run `VoltGuard_1.3.1_Windows_Setup.exe`. The installer offers login startup, enabled by default. It registers the installed application under the current user's `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with `--autostart`. No administrator access or Windows service is required. The panel opens visibly when that user signs in.
 
 The existing `%APPDATA%\VoltGuard\config.json` location is retained. The first v1.1 load migrates old 15–85 or 20–95 limits to **40–95**, shows the panel and requires the charging plug to be verified again. The password stays in Windows Credential Locker. Normal subsequent settings edits are preserved.
 
 ### Linux (including KDE Plasma / Wayland)
 
-Extract `VoltGuard-1.3.0-Linux.tar.gz`. On Ubuntu/Kubuntu install desktop dependencies if missing:
+Extract `VoltGuard-1.3.1-Linux.tar.gz`. On Ubuntu/Kubuntu install desktop dependencies if missing:
 
 ```bash
 sudo apt install python3-venv python3-tk python3-gi python3-dbus gir1.2-ayatanaappindicator3-0.1
@@ -57,6 +57,8 @@ If wallet loading is delayed at login -> keep the existing credential binding, w
 **Encender cargador / Apagar cargador** work while automatic monitoring is running; no STOP/START cycle is needed. A manual request takes priority over an unsent automatic command and uses the monitor's existing connection. Only the two manual buttons are temporarily disabled while the request completes. Metrics and automatic checks continue, with at least **30 seconds** before automation can reverse a manual command; the normal battery/load rules apply afterwards. These buttons are momentary commands, not an indefinite manual override. They also work when monitoring is stopped and leave it stopped.
 
 Queued manual requests expire after 30 seconds and are discarded if monitoring stops or the connection fails. A request is checked again after network reads before switching, so it cannot silently execute later after a stop/reconnection. Manual actions still require the exact charging plug to be confirmed and its relay state acknowledged. Starting monitoring during a standalone manual operation is deferred, preserving one connection owner.
+
+A confirmed **Apagar cargador** ends the current load-assist episode and pending charge cycle. Automatic monitoring remains active, but an ON after the manual grace period requires a **new** sustained load trigger or a low-battery reading; it cannot reuse the previous episode's minimum-ON timer. Delayed AC telemetry cannot recreate the cancelled charge cycle. This prevents re-enabling with idle CPU/GPU just because load was high earlier. Startup logs show the saved entry thresholds, and each new load trigger logs the current CPU/GPU readings and required duration. Before the cloud connection is ready, local telemetry shows `waiting_connection`, not `disabled`.
 
 The controls **Start charge monitoring automatically**, **Open panel at Windows / Linux login**, and **Hide window when opened manually** are independent. Login startup always opens the panel visibly. Closing the window hides it to the tray where supported; use **Exit** to stop the application.
 

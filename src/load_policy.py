@@ -50,6 +50,16 @@ class PowerPolicy:
         if self.active:
             self.powered_since = now
 
+    def manual_off(self):
+        """End this episode without reconstructing it from delayed AC telemetry."""
+        self.active = False
+        self.high_since = self.low_since = self.active_since = self.last_sample = None
+        self.release_pending = False
+        self.powered_since = None
+        self.battery_cycle = False
+        self.initialized = True
+        self.phase = "manual_off"
+
     def decide(self, battery, sample, config, now):
         from src.charge_policy import desired_action
 

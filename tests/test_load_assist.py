@@ -142,6 +142,23 @@ class LoadPolicyTests(unittest.TestCase):
         self.assertEqual(self.tick(0, gpu=99, percent=95, ac=True).action, "off")
         self.assertIsNone(self.tick(15, gpu=99).action)
 
+    def test_manual_off_needs_a_fresh_sustained_load_instead_of_old_minimum_on_time(self):
+        self.activate()
+        self.policy.manual_off()
+        self.assertIsNone(self.tick(50, cpu=20, gpu=0, percent=98, ac=False).action)
+        for at in (55, 60, 65):
+            self.assertIsNone(self.tick(at, gpu=90, percent=98, ac=False).action)
+        self.assertEqual(self.tick(70, gpu=90, percent=98, ac=False).action, "on")
+
+    def test_manual_off_does_not_reconstruct_a_charge_cycle_from_delayed_ac(self):
+        self.tick(0, percent=60, ac=True)
+        self.assertTrue(self.policy.battery_cycle)
+        self.policy.manual_off()
+        self.assertIsNone(self.tick(5, percent=60, ac=True).action)
+        self.assertIsNone(self.tick(10, percent=60, ac=False).action)
+        self.assertFalse(self.policy.battery_cycle)
+        self.assertEqual(self.tick(15, percent=20, ac=False).action, "on")
+
     def test_bad_settings_are_rejected_and_existing_profiles_stay_opt_in(self):
         for changes in ({"load_gpu_off": 50}, {"load_cpu_on": math.nan},
                         {"load_on_seconds": 0}, {"load_off_seconds": 2},
@@ -226,6 +243,7 @@ class LoadBackendTests(unittest.IsolatedAsyncioTestCase):
             sampler.return_value.sample.return_value = LoadSample(0, 10, 50)
             await asyncio.wait_for(self.backend.monitor_loop(), 2)
         self.assertTrue(any(call.args[0] == "sample" for call in recorder.record.call_args_list))
+        self.assertTrue(all(call.args[3] == "waiting_connection" for call in recorder.record.call_args_list if call.args[0] == "sample"))
         recorder.close.assert_called_once()
         self.dev.async_turn_on.assert_not_awaited()
         self.dev.async_turn_off.assert_not_awaited()

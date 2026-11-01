@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from meross_iot.model.enums import OnlineStatus
 from src.battery_backend import BatteryBackend
 from src.ui_app import VoltGuardApp
+from src.load_policy import LOAD_DEFAULTS
+from src.load_sensors import LoadSample
 
 
 def battery(percent=60, ac=False):
@@ -154,6 +156,40 @@ class ManualBackendTests(unittest.IsolatedAsyncioTestCase):
         self.backend.connection = MagicMock()
         self.assertFalse(await self.backend.async_manual_control(True))
         self.backend.connection.assert_not_called()
+
+    async def test_manual_off_does_not_reenable_old_load_episode_after_thirty_seconds(self):
+        cfg = self.backend.cfg.config
+        cfg.update(LOAD_DEFAULTS, load_enabled=True, load_cpu_on=50, load_gpu_on=75)
+        for at in (0, 5, 10, 15):
+            self.backend.policy.decide(battery(100, True), LoadSample(at, 60, 0), cfg, at)
+        self.assertTrue(self.backend.policy.active)
+        self.backend.policy.confirm_on(15)
+        self.now = 175
+        self.backend._sample = LoadSample(self.now, 6, 0)
+        dev = plug(True); dev.is_on.side_effect = [True, False]
+        self.backend.queue_manual(False, self.done)
+        with patch("src.battery_backend.read_battery", return_value=battery(100, True)):
+            await self.backend._process_manual(dev)
+        self.done.assert_called_once_with(True)
+        self.now = 207
+        self.backend._sample = LoadSample(self.now, 20.3, 0)
+        with patch("src.battery_backend.read_battery", return_value=battery(98.27, False)):
+            await self.backend._poll_once(dev)
+        dev.async_turn_on.assert_not_awaited()
+        self.assertFalse(self.backend.policy.active)
+        self.assertTrue(self.backend.running)
+
+    async def test_new_trigger_log_uses_saved_thresholds_instead_of_factory_values(self):
+        cfg = self.backend.cfg.config
+        cfg.update(LOAD_DEFAULTS, load_enabled=True, load_cpu_on=50, load_gpu_on=75)
+        for at in (0, 5, 10, 15, 20):
+            self.now = at
+            self.backend._sample = LoadSample(at, 60, 0)
+            self.backend._decide(battery(100, True))
+        triggers = [call.args[0] for call in self.backend.log.call_args_list if call.args[0].startswith("New load trigger:")]
+        self.assertEqual(len(triggers), 1)
+        self.assertIn("CPU ≥50% or GPU ≥75%", triggers[0])
+        self.assertIn("sustained for 15s", triggers[0])
 
     async def test_standalone_manual_control_still_works_without_starting_monitor(self):
         self.backend.running = False
