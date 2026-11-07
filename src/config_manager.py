@@ -8,6 +8,7 @@ from src.credential_store import CredentialStore, CredentialUnavailable
 
 from src.paths import config_dir
 from src.logger_config import get_logger
+from src.load_policy import LOAD_DEFAULTS
 
 KEYRING_SERVICE = "VoltGuard"
 CONFIG_FILE = config_dir() / "config.json"
@@ -15,6 +16,7 @@ DEFAULTS = {
     "schema_version": 2, "email": "", "uuid": "", "min_bat": 40, "max_bat": 95,
     "check_time": 60, "start_minimized": False, "auto_monitor": True,
     "start_at_login": True, "confirmed_uuid": "", "approved_uuid": "", "device_name": "", "device_type": "", "credential_backend": "",
+    **LOAD_DEFAULTS,
 }
 logger = get_logger()
 

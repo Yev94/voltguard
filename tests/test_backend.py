@@ -26,7 +26,7 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
     async def test_boundary_sends_one_command_then_verifies_it(self):
         dev=plug()
         dev.is_on.side_effect=[False,True]
-        with patch('src.battery_backend.psutil.sensors_battery',return_value=sample(40,False)):
+        with patch('src.battery_backend.read_battery',return_value=sample(40,False)):
             await self.backend._poll_once(dev)
             await self.backend._poll_once(dev)
         dev.async_turn_on.assert_awaited_once()
@@ -35,19 +35,21 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
     async def test_upper_boundary_cuts_only_when_ac_is_known_connected(self):
         dev=plug(True)
         dev.is_on.side_effect=[True,False]
-        with patch('src.battery_backend.psutil.sensors_battery',return_value=sample(95,True)):
+        with patch('src.battery_backend.read_battery',return_value=sample(95,True)):
             await self.backend._poll_once(dev)
         dev.async_turn_off.assert_awaited_once()
 
     async def test_unknown_battery_offline_and_unconfirmed_devices_do_not_switch(self):
         for reading in [None,sample(100,None)]:
             dev=plug()
-            with patch('src.battery_backend.psutil.sensors_battery',return_value=reading):
+            with patch('src.battery_backend.read_battery',return_value=reading):
                 await self.backend._poll_once(dev)
+            expected = 'Battery reading unavailable; waiting' if reading is None else 'Charger status unavailable · 100 %; waiting'
+            self.backend.set_status.assert_called_with(expected, 'orange')
             dev.async_turn_on.assert_not_awaited()
             dev.async_turn_off.assert_not_awaited()
         dev=plug();dev.online_status=OnlineStatus.OFFLINE
-        with patch('src.battery_backend.psutil.sensors_battery',return_value=sample(40,False)):
+        with patch('src.battery_backend.read_battery',return_value=sample(40,False)):
             with self.assertRaises(ConnectionError): await self.backend._poll_once(dev)
         dev.async_turn_on.assert_not_awaited()
         self.cfg.is_confirmed=lambda:False
@@ -55,14 +57,14 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_battery_is_rechecked_after_network_delay(self):
         dev=plug()
-        with patch('src.battery_backend.psutil.sensors_battery',side_effect=[sample(40,False),sample(70,False)]):
+        with patch('src.battery_backend.read_battery',side_effect=[sample(40,False),sample(70,False)]):
             await self.backend._poll_once(dev)
         dev.async_turn_on.assert_not_awaited()
 
     async def test_integer_presentation_does_not_round_the_control_reading(self):
         dev=plug(True)
         reading=sample(94.63,True)
-        with patch('src.battery_backend.psutil.sensors_battery',return_value=reading):
+        with patch('src.battery_backend.read_battery',return_value=reading):
             await self.backend._poll_once(dev)
         self.log.assert_called_once_with('Battery: 95 % | AC: True')
         self.assertIn('Monitoring · 95 % ·',self.backend.set_status.call_args.args[0])
@@ -93,7 +95,7 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_failed_relay_commands_are_capped(self):
         dev=plug(False)
-        with patch('src.battery_backend.psutil.sensors_battery',return_value=sample(40,False)):
+        with patch('src.battery_backend.read_battery',return_value=sample(40,False)):
             for _ in range(3):
                 self.backend._last_action_at=float('-inf')
                 with self.assertRaises(RuntimeError):
